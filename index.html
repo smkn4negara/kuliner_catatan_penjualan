@@ -1,0 +1,1204 @@
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  ClipboardList,
+  History,
+  Settings as SettingsIcon,
+  Plus,
+  Minus,
+  Trash2,
+  Download,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  CheckCircle2,
+  ChefHat,
+  AlertTriangle,
+  X,
+} from "lucide-react";
+
+// ---------- helpers ----------
+const rupiah = (n) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(n) ? n : 0);
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const isoDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const isoMonth = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+
+const dateLabelLong = (isoStr) => {
+  const d = new Date(isoStr);
+  return d.toLocaleDateString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};
+const timeLabel = (isoStr) => {
+  const d = new Date(isoStr);
+  return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+};
+
+const monthLabel = (isoMonthStr) => {
+  const [y, m] = isoMonthStr.split("-").map(Number);
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+};
+
+const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
+const DEFAULT_SETTINGS = {
+  products: [],
+  pegawaiInti: ["", "", ""],
+  helper: ["", "", "", ""],
+  rateInti: 15000,
+  rateHelper: 10000,
+  bonusPerItem: 500,
+};
+
+function downloadCsv(filename, rows) {
+  const csv = rows
+    .map((row) =>
+      row
+        .map((cell) => {
+          const s = String(cell ?? "");
+          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+            return `"${s.replace(/"/g, '""')}"`;
+          }
+          return s;
+        })
+        .join(",")
+    )
+    .join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+// ---------- main app ----------
+export default function App() {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [tab, setTab] = useState("input");
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [history, setHistory] = useState([]);
+  const [quantities, setQuantities] = useState({});
+  const [selectedPegawai, setSelectedPegawai] = useState({});
+  const [toast, setToast] = useState(null);
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved
+  const [expandedId, setExpandedId] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [newProduct, setNewProduct] = useState({ nama: "", harga: "", bonus: false });
+
+  const saveTimer = useRef(null);
+  const initialLoadDone = useRef(false);
+
+  const showToast = useCallback((message, kind = "success") => {
+    setToast({ message, kind });
+    setTimeout(() => setToast(null), 2500);
+  }, []);
+
+  // ---- initial load ----
+  useEffect(() => {
+    (async () => {
+      try {
+        let loadedSettings = DEFAULT_SETTINGS;
+        let loadedHistory = [];
+        try {
+          const s = await window.storage.get("kuliner_settings");
+          if (s && s.value) {
+            const parsed = JSON.parse(s.value);
+            loadedSettings = {
+              ...DEFAULT_SETTINGS,
+              ...parsed,
+              pegawaiInti:
+                Array.isArray(parsed.pegawaiInti) && parsed.pegawaiInti.length === 3
+                  ? parsed.pegawaiInti
+                  : DEFAULT_SETTINGS.pegawaiInti,
+              helper:
+                Array.isArray(parsed.helper) && parsed.helper.length === 4
+                  ? parsed.helper
+                  : DEFAULT_SETTINGS.helper,
+            };
+          }
+        } catch (e) {
+          // key not found yet — first run, keep defaults
+        }
+        try {
+          const h = await window.storage.get("kuliner_history");
+          if (h && h.value) {
+            loadedHistory = JSON.parse(h.value);
+          }
+        } catch (e) {
+          // no history yet
+        }
+        setSettings(loadedSettings);
+        setHistory(Array.isArray(loadedHistory) ? loadedHistory : []);
+      } catch (e) {
+        console.error("Gagal memuat data:", e);
+        setLoadError(true);
+      } finally {
+        setLoading(false);
+        initialLoadDone.current = true;
+      }
+    })();
+  }, []);
+
+  // ---- autosave settings (debounced) ----
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    setSaveStatus("saving");
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        const result = await window.storage.set(
+          "kuliner_settings",
+          JSON.stringify(settings)
+        );
+        if (!result) throw new Error("Storage operation failed");
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 1500);
+      } catch (e) {
+        console.error("Gagal menyimpan pengaturan:", e);
+        setSaveStatus("idle");
+        showToast("Gagal menyimpan pengaturan", "error");
+      }
+    }, 600);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+
+  const persistHistory = async (nextHistory) => {
+    try {
+      const result = await window.storage.set(
+        "kuliner_history",
+        JSON.stringify(nextHistory)
+      );
+      if (!result) throw new Error("Storage operation failed");
+      return true;
+    } catch (e) {
+      console.error("Gagal menyimpan riwayat:", e);
+      showToast("Gagal menyimpan transaksi", "error");
+      return false;
+    }
+  };
+
+  // ---- derived calculations for Input tab ----
+  const products = settings.products || [];
+  const itemRows = products.map((p) => {
+    const jumlah = Number(quantities[p.id] || 0);
+    return { ...p, jumlah, subtotal: jumlah * Number(p.harga || 0) };
+  });
+  const omzet = itemRows.reduce((sum, r) => sum + r.subtotal, 0);
+  const bonusItemCount = itemRows.reduce(
+    (sum, r) => sum + (r.bonus ? r.jumlah : 0),
+    0
+  );
+
+  // Employee list built from names entered in Setting. Only named slots are
+  // selectable/paid; a checkbox lets you mark who actually worked today.
+  const pegawaiList = [
+    ...settings.pegawaiInti.map((nm, i) => ({
+      key: `inti-${i}`,
+      nama: (nm || "").trim(),
+      rate: Number(settings.rateInti || 0),
+      type: "inti",
+    })),
+    ...settings.helper.map((nm, i) => ({
+      key: `helper-${i}`,
+      nama: (nm || "").trim(),
+      rate: Number(settings.rateHelper || 0),
+      type: "helper",
+    })),
+  ];
+  const isPegawaiSelected = (key, hasName) =>
+    selectedPegawai[key] !== undefined ? selectedPegawai[key] : hasName;
+  const togglePegawai = (key, hasName) => {
+    if (!hasName) return;
+    setSelectedPegawai((s) => ({
+      ...s,
+      [key]: !isPegawaiSelected(key, hasName),
+    }));
+  };
+
+  const hadirInti = pegawaiList.filter(
+    (p) => p.type === "inti" && p.nama && isPegawaiSelected(p.key, true)
+  );
+  const hadirHelper = pegawaiList.filter(
+    (p) => p.type === "helper" && p.nama && isPegawaiSelected(p.key, true)
+  );
+  const gajiIntiTotal = hadirInti.length * Number(settings.rateInti || 0);
+  const gajiHelperTotal = hadirHelper.length * Number(settings.rateHelper || 0);
+  const bonusTotal = bonusItemCount * Number(settings.bonusPerItem || 0);
+  const totalHadirCount = hadirInti.length + hadirHelper.length;
+  const bonusPerPegawai = totalHadirCount > 0 ? bonusTotal / totalHadirCount : 0;
+  const totalGaji = gajiIntiTotal + gajiHelperTotal + bonusTotal;
+  const totalLaba = omzet - totalGaji;
+  const adaTransaksi = itemRows.some((r) => r.jumlah > 0);
+
+  // ---- current-month running totals (reset automatically each new month) ----
+  const currentMonthStr = isoMonth(new Date());
+  const monthRecords = history.filter(
+    (r) => isoMonth(new Date(r.dateISO)) === currentMonthStr
+  );
+  const monthOmzet = monthRecords.reduce((s, r) => s + r.omzet, 0);
+  const monthLaba = monthRecords.reduce((s, r) => s + r.laba, 0);
+
+  const setQty = (id, val) => {
+    const n = Math.max(0, Math.floor(Number(val) || 0));
+    setQuantities((q) => ({ ...q, [id]: n }));
+  };
+
+  const handleSimpanTransaksi = async () => {
+    if (!adaTransaksi) {
+      showToast("Isi jumlah terjual dulu ya", "error");
+      return;
+    }
+    const now = new Date();
+    const record = {
+      id: uid(),
+      dateISO: now.toISOString(),
+      items: itemRows
+        .filter((r) => r.jumlah > 0)
+        .map((r) => ({
+          nama: r.nama,
+          harga: Number(r.harga || 0),
+          jumlah: r.jumlah,
+          subtotal: r.subtotal,
+          bonus: !!r.bonus,
+        })),
+      omzet,
+      gajiInti: gajiIntiTotal,
+      gajiHelper: gajiHelperTotal,
+      pegawaiIntiHadir: hadirInti.map((p) => p.nama),
+      pegawaiHelperHadir: hadirHelper.map((p) => p.nama),
+      bonus: bonusTotal,
+      bonusItemCount,
+      totalGaji,
+      laba: totalLaba,
+    };
+    const next = [record, ...history];
+    setHistory(next);
+    const ok = await persistHistory(next);
+    if (ok) {
+      setQuantities({});
+      setSelectedPegawai({});
+      showToast("Transaksi hari ini tersimpan");
+    }
+  };
+
+  // ---- product management ----
+  const addProduct = () => {
+    const nama = newProduct.nama.trim();
+    const harga = Number(newProduct.harga);
+    if (!nama) {
+      showToast("Nama menu belum diisi", "error");
+      return;
+    }
+    if (!harga || harga <= 0) {
+      showToast("Harga menu belum valid", "error");
+      return;
+    }
+    setSettings((s) => ({
+      ...s,
+      products: [
+        ...s.products,
+        { id: uid(), nama, harga, bonus: !!newProduct.bonus },
+      ],
+    }));
+    setNewProduct({ nama: "", harga: "", bonus: false });
+  };
+
+  const updateProduct = (id, patch) => {
+    setSettings((s) => ({
+      ...s,
+      products: s.products.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    }));
+  };
+
+  const removeProduct = (id) => {
+    setSettings((s) => ({
+      ...s,
+      products: s.products.filter((p) => p.id !== id),
+    }));
+    setQuantities((q) => {
+      const nq = { ...q };
+      delete nq[id];
+      return nq;
+    });
+  };
+
+  const updatePegawaiInti = (idx, val) => {
+    setSettings((s) => {
+      const arr = [...s.pegawaiInti];
+      arr[idx] = val;
+      return { ...s, pegawaiInti: arr };
+    });
+  };
+  const updateHelper = (idx, val) => {
+    setSettings((s) => {
+      const arr = [...s.helper];
+      arr[idx] = val;
+      return { ...s, helper: arr };
+    });
+  };
+
+  // ---- history / rekap ----
+  const [rekapDate, setRekapDate] = useState(isoDate(new Date()));
+  const [rekapMonth, setRekapMonth] = useState(isoMonth(new Date()));
+
+  const recordsForDate = (dateStr) =>
+    history.filter((r) => isoDate(new Date(r.dateISO)) === dateStr);
+  const recordsForMonth = (monthStr) =>
+    history.filter((r) => isoMonth(new Date(r.dateISO)) === monthStr);
+
+  const handleUnduhHarian = () => {
+    const recs = recordsForDate(rekapDate);
+    if (recs.length === 0) {
+      showToast("Tidak ada transaksi pada tanggal itu", "error");
+      return;
+    }
+    const rows = [
+      ["Rekap Harian Kuliner"],
+      ["Tanggal", rekapDate],
+      [],
+      ["Jam", "Produk", "Harga", "Jumlah", "Subtotal", "Bonus"],
+    ];
+    recs
+      .slice()
+      .reverse()
+      .forEach((r) => {
+        r.items.forEach((it) => {
+          rows.push([
+            timeLabel(r.dateISO),
+            it.nama,
+            it.harga,
+            it.jumlah,
+            it.subtotal,
+            it.bonus ? "Ya" : "",
+          ]);
+        });
+      });
+    const totalOmzet = recs.reduce((s, r) => s + r.omzet, 0);
+    const totalGajiHari = recs.reduce((s, r) => s + r.totalGaji, 0);
+    const totalLabaHari = recs.reduce((s, r) => s + r.laba, 0);
+    rows.push([]);
+    rows.push(["Total Omzet", totalOmzet]);
+    rows.push(["Total Gaji (termasuk bonus)", totalGajiHari]);
+    rows.push(["Total Laba", totalLabaHari]);
+    downloadCsv(`rekap-harian-${rekapDate}.csv`, rows);
+  };
+
+  const handleUnduhBulanan = () => {
+    const recs = recordsForMonth(rekapMonth);
+    if (recs.length === 0) {
+      showToast("Tidak ada transaksi pada bulan itu", "error");
+      return;
+    }
+    const byDate = {};
+    recs.forEach((r) => {
+      const d = isoDate(new Date(r.dateISO));
+      if (!byDate[d]) byDate[d] = { omzet: 0, gaji: 0, laba: 0, jumlahTransaksi: 0 };
+      byDate[d].omzet += r.omzet;
+      byDate[d].gaji += r.totalGaji;
+      byDate[d].laba += r.laba;
+      byDate[d].jumlahTransaksi += 1;
+    });
+    const rows = [
+      ["Rekap Bulanan Kuliner"],
+      ["Bulan", monthLabel(rekapMonth)],
+      [],
+      ["Tanggal", "Jumlah Transaksi", "Omzet", "Total Gaji", "Laba"],
+    ];
+    Object.keys(byDate)
+      .sort()
+      .forEach((d) => {
+        const v = byDate[d];
+        rows.push([d, v.jumlahTransaksi, v.omzet, v.gaji, v.laba]);
+      });
+    const totalOmzet = recs.reduce((s, r) => s + r.omzet, 0);
+    const totalGajiBulan = recs.reduce((s, r) => s + r.totalGaji, 0);
+    const totalLabaBulan = recs.reduce((s, r) => s + r.laba, 0);
+    rows.push([]);
+    rows.push(["Total Omzet", totalOmzet]);
+    rows.push(["Total Gaji (termasuk bonus)", totalGajiBulan]);
+    rows.push(["Total Laba", totalLabaBulan]);
+    downloadCsv(`rekap-bulanan-${rekapMonth}.csv`, rows);
+  };
+
+  const handleClearHistory = async () => {
+    setHistory([]);
+    await persistHistory([]);
+    setConfirmClear(false);
+    showToast("Semua riwayat dihapus");
+  };
+
+  // ---------- render ----------
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F6F2EA]">
+        <div className="flex flex-col items-center gap-3 text-[#6B675F]">
+          <Loader2 className="animate-spin" size={28} />
+          <span className="text-sm">Memuat data...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F6F2EA] flex justify-center">
+      <div className="w-full max-w-[440px] min-h-screen bg-[#F6F2EA] flex flex-col relative shadow-xl">
+        {/* Header */}
+        <header className="bg-[#0B4142] px-5 pt-6 pb-8 rounded-b-[28px] shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-[#12595B] p-2 rounded-full">
+              <ChefHat size={20} className="text-[#EAF4F1]" />
+            </div>
+            <div>
+              <h1
+                className="text-2xl text-[#EAF4F1] leading-tight"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+              >
+                Kuliner
+              </h1>
+              <p className="text-[11px] text-[#9FC7C2] tracking-wide">
+                Pencatatan penjualan harian
+              </p>
+            </div>
+          </div>
+        </header>
+
+        {/* Monthly summary */}
+        <div className="px-4 -mt-6 mb-1 shrink-0">
+          <div className="bg-white rounded-2xl border border-[#E4DFD3] shadow-sm p-4">
+            <p className="text-[11px] text-[#6B675F] mb-2">
+              {monthLabel(currentMonthStr)}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[11px] text-[#6B675F] mb-0.5">Omzet Bulan Ini</p>
+                <p className="text-2xl font-bold text-[#0B4142] tabular-nums leading-tight">
+                  {rupiah(monthOmzet)}
+                </p>
+              </div>
+              <div className="border-l border-[#E4DFD3] pl-3">
+                <p className="text-[11px] text-[#6B675F] mb-0.5">Laba Bulan Ini</p>
+                <p
+                  className={`text-2xl font-bold tabular-nums leading-tight ${
+                    monthLaba >= 0 ? "text-[#2F6F4E]" : "text-[#B3261E]"
+                  }`}
+                >
+                  {rupiah(monthLaba)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <nav className="flex px-4 mb-1 shrink-0">
+          <div className="flex w-full bg-white rounded-2xl shadow-sm border border-[#E4DFD3] p-1 gap-1">
+            {[
+              { id: "input", label: "Input", icon: ClipboardList },
+              { id: "riwayat", label: "Riwayat", icon: History },
+              { id: "setting", label: "Setting", icon: SettingsIcon },
+            ].map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-xs font-medium transition-colors ${
+                    active
+                      ? "bg-[#0B4142] text-white"
+                      : "text-[#6B675F] hover:bg-[#F6F2EA]"
+                  }`}
+                >
+                  <Icon size={17} />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto px-4 pb-28 pt-2">
+          {tab === "input" && (
+            <InputTab
+              products={products}
+              itemRows={itemRows}
+              setQty={setQty}
+              omzet={omzet}
+              gajiIntiTotal={gajiIntiTotal}
+              gajiHelperTotal={gajiHelperTotal}
+              bonusTotal={bonusTotal}
+              bonusItemCount={bonusItemCount}
+              totalGaji={totalGaji}
+              totalLaba={totalLaba}
+              settings={settings}
+              pegawaiList={pegawaiList}
+              isPegawaiSelected={isPegawaiSelected}
+              togglePegawai={togglePegawai}
+              bonusPerPegawai={bonusPerPegawai}
+              onSimpan={handleSimpanTransaksi}
+              onGoSetting={() => setTab("setting")}
+            />
+          )}
+
+          {tab === "riwayat" && (
+            <RiwayatTab
+              history={history}
+              expandedId={expandedId}
+              setExpandedId={setExpandedId}
+              rekapDate={rekapDate}
+              setRekapDate={setRekapDate}
+              rekapMonth={rekapMonth}
+              setRekapMonth={setRekapMonth}
+              onUnduhHarian={handleUnduhHarian}
+              onUnduhBulanan={handleUnduhBulanan}
+              confirmClear={confirmClear}
+              setConfirmClear={setConfirmClear}
+              onClearHistory={handleClearHistory}
+            />
+          )}
+
+          {tab === "setting" && (
+            <SettingTab
+              settings={settings}
+              setSettings={setSettings}
+              newProduct={newProduct}
+              setNewProduct={setNewProduct}
+              addProduct={addProduct}
+              updateProduct={updateProduct}
+              removeProduct={removeProduct}
+              updatePegawaiInti={updatePegawaiInti}
+              updateHelper={updateHelper}
+              saveStatus={saveStatus}
+            />
+          )}
+        </main>
+
+        {/* Toast */}
+        {toast && (
+          <div
+            className={`absolute bottom-5 left-4 right-4 rounded-xl px-4 py-3 text-sm text-white flex items-center gap-2 shadow-lg ${
+              toast.kind === "error" ? "bg-[#B3261E]" : "bg-[#0B4142]"
+            }`}
+          >
+            {toast.kind === "error" ? (
+              <AlertTriangle size={16} />
+            ) : (
+              <CheckCircle2 size={16} />
+            )}
+            <span>{toast.message}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Input Tab ----------
+function InputTab({
+  products,
+  itemRows,
+  setQty,
+  omzet,
+  gajiIntiTotal,
+  gajiHelperTotal,
+  bonusTotal,
+  bonusItemCount,
+  totalGaji,
+  totalLaba,
+  settings,
+  pegawaiList,
+  isPegawaiSelected,
+  togglePegawai,
+  bonusPerPegawai,
+  onSimpan,
+  onGoSetting,
+}) {
+  const [showRincian, setShowRincian] = useState(true);
+
+  if (products.length === 0) {
+    return (
+      <div className="mt-10 flex flex-col items-center text-center gap-3 px-4">
+        <div className="bg-white border border-[#E4DFD3] rounded-2xl p-6 w-full">
+          <p className="text-[#262624] font-medium mb-1">Belum ada menu</p>
+          <p className="text-sm text-[#6B675F] mb-4">
+            Tambahkan menu terlebih dulu di halaman Setting agar bisa mulai
+            mencatat penjualan.
+          </p>
+          <button
+            onClick={onGoSetting}
+            className="bg-[#0B4142] text-white text-sm px-4 py-2.5 rounded-xl font-medium"
+          >
+            Buka Setting
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-[#6B675F] px-1">
+        Masukkan jumlah terjual untuk tiap menu hari ini.
+      </p>
+
+      <div className="flex flex-col gap-2">
+        {itemRows.map((r) => (
+          <div
+            key={r.id}
+            className="bg-white rounded-2xl border border-[#E4DFD3] p-3.5 flex items-center gap-3"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-[#262624] font-medium text-sm truncate flex items-center gap-1.5">
+                {r.nama}
+                {r.bonus && (
+                  <span className="text-[9px] uppercase tracking-wide bg-[#F1E4D8] text-[#A6472A] px-1.5 py-0.5 rounded-full font-semibold">
+                    bonus
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-[#6B675F] tabular-nums">{rupiah(r.harga)}</p>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setQty(r.id, r.jumlah - 1)}
+                className="w-7 h-7 rounded-full bg-[#F6F2EA] flex items-center justify-center text-[#0B4142]"
+              >
+                <Minus size={14} />
+              </button>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={r.jumlah === 0 ? "" : r.jumlah}
+                placeholder="0"
+                onChange={(e) => setQty(r.id, e.target.value)}
+                className="w-11 text-center text-sm font-semibold text-[#262624] bg-transparent outline-none tabular-nums"
+              />
+              <button
+                onClick={() => setQty(r.id, r.jumlah + 1)}
+                className="w-7 h-7 rounded-full bg-[#0B4142] flex items-center justify-center text-white"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+
+            <div className="w-20 text-right shrink-0">
+              <p className="text-sm font-semibold text-[#262624] tabular-nums">
+                {r.subtotal > 0 ? rupiah(r.subtotal) : "—"}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Summary */}
+      <div className="bg-white rounded-2xl border border-[#E4DFD3] p-4 mt-1 flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm text-[#6B675F]">Total Omzet</span>
+          <span className="text-xl font-bold text-[#262624] tabular-nums">
+            {rupiah(omzet)}
+          </span>
+        </div>
+
+        <button
+          onClick={() => setShowRincian((v) => !v)}
+          className="flex items-center justify-between text-sm text-[#0B4142] font-medium border-t border-[#E4DFD3] pt-3"
+        >
+          Rincian Gaji Pegawai
+          {showRincian ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+
+        {showRincian && (
+          <div className="flex flex-col gap-2.5 text-sm text-[#6B675F]">
+            <p className="text-xs text-[#6B675F] -mb-1">
+              Pilih pegawai yang bekerja hari ini — gaji pokok + bagian bonus
+              langsung terlihat di tiap nama.
+            </p>
+
+            <div className="flex flex-col gap-1">
+              {pegawaiList.map((p) => {
+                const hasName = !!p.nama;
+                const checked = hasName && isPegawaiSelected(p.key, true);
+                const rowTotal = checked ? p.rate + bonusPerPegawai : 0;
+                return (
+                  <label
+                    key={p.key}
+                    className={`flex items-center gap-2 py-1.5 ${
+                      hasName ? "" : "opacity-40"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      disabled={!hasName}
+                      checked={checked}
+                      onChange={() => togglePegawai(p.key, hasName)}
+                      className="accent-[#0B4142]"
+                    />
+                    <span className="flex-1 text-[#262624] min-w-0 truncate">
+                      {hasName
+                        ? p.nama
+                        : p.type === "inti"
+                        ? "Pegawai inti (belum diisi)"
+                        : "Helper (belum diisi)"}
+                      <span className="text-[10px] text-[#6B675F] ml-1">
+                        · {p.type === "inti" ? "inti" : "helper"}
+                      </span>
+                    </span>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-semibold text-[#262624] tabular-nums">
+                        {checked ? rupiah(rowTotal) : "—"}
+                      </p>
+                      {checked && (
+                        <p className="text-[10px] text-[#6B675F] tabular-nums">
+                          {rupiah(p.rate)}
+                          {bonusPerPegawai > 0
+                            ? ` + bonus ${rupiah(bonusPerPegawai)}`
+                            : ""}
+                        </p>
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-between pt-1 border-t border-dashed border-[#E4DFD3]">
+              <span>
+                Bonus penjualan ({bonusItemCount} item × {rupiah(settings.bonusPerItem)})
+              </span>
+              <span className="tabular-nums">{rupiah(bonusTotal)}</span>
+            </div>
+            <div className="flex justify-between font-semibold text-[#262624] pt-1.5 border-t border-dashed border-[#E4DFD3]">
+              <span>Total Gaji</span>
+              <span className="tabular-nums">{rupiah(totalGaji)}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-baseline justify-between border-t border-[#E4DFD3] pt-3">
+          <span className="text-sm text-[#6B675F]">Total Laba</span>
+          <span
+            className={`text-xl font-bold tabular-nums ${
+              totalLaba >= 0 ? "text-[#2F6F4E]" : "text-[#B3261E]"
+            }`}
+          >
+            {rupiah(totalLaba)}
+          </span>
+        </div>
+      </div>
+
+      <button
+        onClick={onSimpan}
+        className="w-full bg-[#0B4142] text-white font-medium py-3.5 rounded-2xl mt-1 active:opacity-90"
+      >
+        Simpan Transaksi Hari Ini
+      </button>
+    </div>
+  );
+}
+
+// ---------- Riwayat Tab ----------
+function RiwayatTab({
+  history,
+  expandedId,
+  setExpandedId,
+  rekapDate,
+  setRekapDate,
+  rekapMonth,
+  setRekapMonth,
+  onUnduhHarian,
+  onUnduhBulanan,
+  confirmClear,
+  setConfirmClear,
+  onClearHistory,
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="bg-white rounded-2xl border border-[#E4DFD3] p-4 flex flex-col gap-3">
+        <p className="text-sm font-medium text-[#262624]">Unduh Rekap</p>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={rekapDate}
+            onChange={(e) => setRekapDate(e.target.value)}
+            className="flex-1 text-sm border border-[#E4DFD3] rounded-xl px-3 py-2 bg-[#F6F2EA] text-[#262624]"
+          />
+          <button
+            onClick={onUnduhHarian}
+            className="flex items-center gap-1.5 bg-[#0B4142] text-white text-xs font-medium px-3 py-2.5 rounded-xl shrink-0"
+          >
+            <Download size={14} /> Harian
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="month"
+            value={rekapMonth}
+            onChange={(e) => setRekapMonth(e.target.value)}
+            className="flex-1 text-sm border border-[#E4DFD3] rounded-xl px-3 py-2 bg-[#F6F2EA] text-[#262624]"
+          />
+          <button
+            onClick={onUnduhBulanan}
+            className="flex items-center gap-1.5 bg-[#0B4142] text-white text-xs font-medium px-3 py-2.5 rounded-xl shrink-0"
+          >
+            <Download size={14} /> Bulanan
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-sm font-medium text-[#262624] px-1 mb-2">
+          Daftar Transaksi ({history.length})
+        </p>
+
+        {history.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-[#E4DFD3] p-6 text-center text-sm text-[#6B675F]">
+            Belum ada transaksi tersimpan.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {history.map((r) => {
+              const open = expandedId === r.id;
+              return (
+                <div
+                  key={r.id}
+                  className="bg-white rounded-2xl border border-[#E4DFD3] overflow-hidden"
+                >
+                  <button
+                    onClick={() => setExpandedId(open ? null : r.id)}
+                    className="w-full flex items-center justify-between p-3.5 text-left"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-[#262624]">
+                        {dateLabelLong(r.dateISO)}
+                      </p>
+                      <p className="text-xs text-[#6B675F]">
+                        {timeLabel(r.dateISO)} · Omzet {rupiah(r.omzet)} · Laba{" "}
+                        <span
+                          className={
+                            r.laba >= 0 ? "text-[#2F6F4E]" : "text-[#B3261E]"
+                          }
+                        >
+                          {rupiah(r.laba)}
+                        </span>
+                      </p>
+                    </div>
+                    {open ? (
+                      <ChevronUp size={16} className="text-[#6B675F] shrink-0" />
+                    ) : (
+                      <ChevronDown size={16} className="text-[#6B675F] shrink-0" />
+                    )}
+                  </button>
+
+                  {open && (
+                    <div className="px-3.5 pb-3.5 flex flex-col gap-2 border-t border-[#E4DFD3] pt-3">
+                      {r.items.map((it, i) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span className="text-[#262624]">
+                            {it.nama} × {it.jumlah}
+                          </span>
+                          <span className="text-[#6B675F] tabular-nums">
+                            {rupiah(it.subtotal)}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="border-t border-dashed border-[#E4DFD3] pt-2 flex flex-col gap-1 text-xs text-[#6B675F]">
+                        {(r.pegawaiIntiHadir?.length > 0 ||
+                          r.pegawaiHelperHadir?.length > 0) && (
+                          <div className="flex justify-between gap-3">
+                            <span>Pegawai hadir</span>
+                            <span className="text-right text-[#262624]">
+                              {[...(r.pegawaiIntiHadir || []), ...(r.pegawaiHelperHadir || [])].join(
+                                ", "
+                              ) || "-"}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span>Gaji Inti + Helper</span>
+                          <span className="tabular-nums">
+                            {rupiah(r.gajiInti + r.gajiHelper)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Bonus ({r.bonusItemCount} item)</span>
+                          <span className="tabular-nums">{rupiah(r.bonus)}</span>
+                        </div>
+                        <div className="flex justify-between font-medium text-[#262624]">
+                          <span>Total Gaji</span>
+                          <span className="tabular-nums">{rupiah(r.totalGaji)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {history.length > 0 && (
+        <div className="pt-1">
+          {!confirmClear ? (
+            <button
+              onClick={() => setConfirmClear(true)}
+              className="text-xs text-[#B3261E] underline"
+            >
+              Hapus semua riwayat
+            </button>
+          ) : (
+            <div className="bg-[#FBEAE9] border border-[#EFC6C2] rounded-xl p-3 flex flex-col gap-2">
+              <p className="text-xs text-[#7A241E]">
+                Yakin hapus semua riwayat transaksi? Tindakan ini tidak bisa
+                dibatalkan.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={onClearHistory}
+                  className="flex-1 bg-[#B3261E] text-white text-xs font-medium py-2 rounded-lg"
+                >
+                  Ya, hapus
+                </button>
+                <button
+                  onClick={() => setConfirmClear(false)}
+                  className="flex-1 bg-white border border-[#E4DFD3] text-[#262624] text-xs font-medium py-2 rounded-lg"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Setting Tab ----------
+function SettingTab({
+  settings,
+  setSettings,
+  newProduct,
+  setNewProduct,
+  addProduct,
+  updateProduct,
+  removeProduct,
+  updatePegawaiInti,
+  updateHelper,
+  saveStatus,
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end px-1 h-4">
+        {saveStatus === "saving" && (
+          <span className="text-[11px] text-[#6B675F] flex items-center gap-1">
+            <Loader2 size={11} className="animate-spin" /> Menyimpan...
+          </span>
+        )}
+        {saveStatus === "saved" && (
+          <span className="text-[11px] text-[#2F6F4E] flex items-center gap-1">
+            <CheckCircle2 size={11} /> Tersimpan
+          </span>
+        )}
+      </div>
+
+      {/* Products */}
+      <div className="bg-white rounded-2xl border border-[#E4DFD3] p-4 flex flex-col gap-3">
+        <p className="text-sm font-medium text-[#262624]">Kelola Menu Produk</p>
+
+        {settings.products.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {settings.products.map((p) => (
+              <div
+                key={p.id}
+                className="border border-[#E4DFD3] rounded-xl p-2.5 flex items-center gap-2"
+              >
+                <input
+                  value={p.nama}
+                  onChange={(e) => updateProduct(p.id, { nama: e.target.value })}
+                  className="flex-1 min-w-0 text-sm bg-[#F6F2EA] rounded-lg px-2.5 py-2 outline-none text-[#262624]"
+                  placeholder="Nama menu"
+                />
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={p.harga}
+                  onChange={(e) =>
+                    updateProduct(p.id, { harga: Number(e.target.value) || 0 })
+                  }
+                  className="w-20 text-sm bg-[#F6F2EA] rounded-lg px-2 py-2 outline-none text-[#262624] tabular-nums"
+                  placeholder="Harga"
+                />
+                <button
+                  onClick={() => updateProduct(p.id, { bonus: !p.bonus })}
+                  title="Tandai sebagai bonus"
+                  className={`text-[10px] px-2 py-2 rounded-lg font-semibold shrink-0 ${
+                    p.bonus
+                      ? "bg-[#A6472A] text-white"
+                      : "bg-[#F1EEE6] text-[#6B675F]"
+                  }`}
+                >
+                  Bonus
+                </button>
+                <button
+                  onClick={() => removeProduct(p.id)}
+                  className="text-[#B3261E] shrink-0 p-1"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="border-t border-dashed border-[#E4DFD3] pt-3 flex flex-col gap-2">
+          <p className="text-xs text-[#6B675F]">Tambah menu baru</p>
+          <div className="flex items-center gap-2">
+            <input
+              value={newProduct.nama}
+              onChange={(e) =>
+                setNewProduct((n) => ({ ...n, nama: e.target.value }))
+              }
+              placeholder="Nama menu"
+              className="flex-1 min-w-0 text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624]"
+            />
+            <input
+              type="number"
+              inputMode="numeric"
+              value={newProduct.harga}
+              onChange={(e) =>
+                setNewProduct((n) => ({ ...n, harga: e.target.value }))
+              }
+              placeholder="Harga"
+              className="w-20 text-sm border border-[#E4DFD3] rounded-lg px-2 py-2 outline-none text-[#262624]"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-xs text-[#6B675F]">
+            <input
+              type="checkbox"
+              checked={newProduct.bonus}
+              onChange={(e) =>
+                setNewProduct((n) => ({ ...n, bonus: e.target.checked }))
+              }
+              className="accent-[#0B4142]"
+            />
+            Tandai sebagai menu bonus (dapat bonus Rp per item terjual)
+          </label>
+          <button
+            onClick={addProduct}
+            className="flex items-center justify-center gap-1.5 bg-[#0B4142] text-white text-sm font-medium py-2.5 rounded-xl"
+          >
+            <Plus size={15} /> Tambah Menu
+          </button>
+        </div>
+      </div>
+
+      {/* Employees */}
+      <div className="bg-white rounded-2xl border border-[#E4DFD3] p-4 flex flex-col gap-3">
+        <p className="text-sm font-medium text-[#262624]">Kelola Pegawai & Gaji</p>
+
+        <div>
+          <p className="text-xs text-[#6B675F] mb-1.5">Pegawai Inti (3 orang)</p>
+          <div className="flex flex-col gap-1.5">
+            {settings.pegawaiInti.map((nm, i) => (
+              <input
+                key={i}
+                value={nm}
+                onChange={(e) => updatePegawaiInti(i, e.target.value)}
+                placeholder={`Nama pegawai inti ${i + 1}`}
+                className="text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624]"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs text-[#6B675F] mb-1.5">Helper (4 orang)</p>
+          <div className="flex flex-col gap-1.5">
+            {settings.helper.map((nm, i) => (
+              <input
+                key={i}
+                value={nm}
+                onChange={(e) => updateHelper(i, e.target.value)}
+                placeholder={`Nama helper ${i + 1}`}
+                className="text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624]"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <p className="text-xs text-[#6B675F] mb-1">Gaji pegawai inti / hari</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={settings.rateInti}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, rateInti: Number(e.target.value) || 0 }))
+              }
+              className="w-full text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624] tabular-nums"
+            />
+          </div>
+          <div>
+            <p className="text-xs text-[#6B675F] mb-1">Gaji helper / hari</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={settings.rateHelper}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  rateHelper: Number(e.target.value) || 0,
+                }))
+              }
+              className="w-full text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624] tabular-nums"
+            />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs text-[#6B675F] mb-1">
+            Bonus per item menu bonus terjual
+          </p>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={settings.bonusPerItem}
+            onChange={(e) =>
+              setSettings((s) => ({
+                ...s,
+                bonusPerItem: Number(e.target.value) || 0,
+              }))
+            }
+            className="w-full text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624] tabular-nums"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
