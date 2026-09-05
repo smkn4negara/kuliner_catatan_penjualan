@@ -1,1204 +1,1047 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import {
-  ClipboardList,
-  History,
-  Settings as SettingsIcon,
-  Plus,
-  Minus,
-  Trash2,
-  Download,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  CheckCircle2,
-  ChefHat,
-  AlertTriangle,
-  X,
-} from "lucide-react";
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#1E1B16">
+<title>Kuliner — Manajemen Penjualan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#1E1B16;
+    --paper:#F5F2EC;
+    --card:#FFFFFF;
+    --line:#E4DFD3;
+    --muted:#8A8377;
+    --accent:#C98A1B;
+    --accent-ink:#1E1B16;
+    --profit:#2F6D4F;
+    --danger:#B23A2E;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  .hidden{ display:none !important; }
+  body{
+    margin:0;
+    font-family:'Manrope',sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  .app-shell{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100vh;
+    background:var(--paper);
+    box-shadow:0 0 40px rgba(0,0,0,.06);
+    display:flex;
+    flex-direction:column;
+  }
+  header.topbar{
+    background:var(--ink);
+    color:var(--paper);
+    padding:22px 20px 18px;
+  }
+  header.topbar h1{
+    margin:0;
+    font-size:1.6rem;
+    font-weight:800;
+    letter-spacing:-0.02em;
+  }
+  .demo-banner{
+    background:#FCEFD2;
+    color:#6B4E0E;
+    font-size:.78rem;
+    padding:8px 20px;
+    border-bottom:1px solid #EAD9A6;
+  }
+  nav.tabs{
+    display:flex;
+    background:var(--card);
+    border-bottom:1px solid var(--line);
+    position:sticky;
+    top:0;
+    z-index:5;
+  }
+  .tab-btn{
+    flex:1;
+    padding:13px 8px;
+    background:none;
+    border:none;
+    font-family:inherit;
+    font-weight:600;
+    font-size:.88rem;
+    color:var(--muted);
+    border-bottom:3px solid transparent;
+    cursor:pointer;
+  }
+  .tab-btn.active{
+    color:var(--ink);
+    border-bottom-color:var(--accent);
+  }
+  .summary-bar{
+    display:flex;
+    background:var(--card);
+    border-bottom:1px solid var(--line);
+    padding:14px 20px;
+  }
+  .summary-stat{ flex:1; }
+  .summary-stat + .summary-stat{
+    border-left:1px solid var(--line);
+    padding-left:16px;
+    margin-left:16px;
+  }
+  .summary-stat .label{ font-size:.72rem; color:var(--muted); font-weight:600; }
+  .summary-stat .value{
+    font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; margin-top:2px;
+  }
+  .summary-stat.laba .value{ color:var(--profit); }
+  main{ flex:1; padding:16px 20px 40px; }
+  .tab-section.hidden{ display:none; }
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .card h2{ font-size:1rem; font-weight:700; margin:0 0 12px; }
+  .card h3{
+    font-size:.88rem; font-weight:700; margin:18px 0 10px; padding-top:14px; border-top:1px solid var(--line);
+  }
+  .card h3:first-child{ border-top:none; padding-top:0; margin-top:0; }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:.8rem; font-weight:600; color:var(--ink); margin-bottom:5px; }
+  .field input, .field select{
+    width:100%; padding:10px 12px; font-family:inherit; font-size:.95rem;
+    border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink);
+  }
+  .field input:focus, .field select:focus{ outline:2px solid var(--accent); outline-offset:-1px; }
+  .static-row{ display:flex; justify-content:space-between; align-items:center; padding:9px 0; font-size:.9rem; }
+  .static-row .label{ color:var(--muted); font-weight:600; }
+  .static-row .value{ font-weight:700; font-variant-numeric:tabular-nums; }
+  .static-row.strong .value{ font-size:1.05rem; }
+  .divider{ border:none; border-top:1px solid var(--line); margin:12px 0; }
+  .big-total{ text-align:center; padding:14px 0 6px; }
+  .big-total .label{ font-size:.78rem; color:var(--muted); font-weight:600; }
+  .big-total .value{
+    font-size:1.9rem; font-weight:800; color:var(--profit); font-variant-numeric:tabular-nums;
+  }
+  .btn{
+    display:block; width:100%; padding:12px 16px; border-radius:8px; border:none;
+    font-family:inherit; font-weight:700; font-size:.92rem; cursor:pointer; text-align:center;
+  }
+  .btn-primary{ background:var(--accent); color:var(--accent-ink); margin-top:8px;}
+  .btn-outline{ background:transparent; border:1px solid var(--line); color:var(--ink); }
+  .btn-danger{ background:transparent; border:1px solid var(--danger); color:var(--danger); }
+  .btn-sm{ width:auto; padding:6px 12px; font-size:.78rem; }
+  .btn-row{ display:flex; gap:8px; }
+  .btn-row .btn{ margin-top:0; }
+  .chip-row{ display:flex; gap:8px; overflow-x:auto; margin-bottom:12px; }
+  .chip{
+    padding:6px 14px; border-radius:999px; border:1px solid var(--line); background:var(--card);
+    font-weight:600; font-size:.8rem; color:var(--muted); white-space:nowrap; cursor:pointer;
+  }
+  .chip.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .table-wrap{ overflow-x:auto; margin-bottom:10px; }
+  table{ width:100%; border-collapse:collapse; font-size:.78rem; min-width:600px; }
+  th, td{ padding:8px 6px; border-bottom:1px solid var(--line); text-align:left; }
+  td.produk-col{ white-space:normal; min-width:160px; }
+  th{ color:var(--muted); font-weight:700; font-size:.72rem; white-space:nowrap; }
+  td.profit{ color:var(--profit); font-weight:700; white-space:nowrap; }
+  tfoot td{ font-weight:800; border-top:2px solid var(--ink); border-bottom:none; white-space:nowrap; }
+  .empty-note{ color:var(--muted); font-size:.85rem; text-align:center; padding:14px 0; }
+  .cart-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:9px 0; border-bottom:1px solid var(--line);
+  }
+  .cart-row:last-child{ border-bottom:none; }
+  .cart-info{ display:flex; flex-direction:column; }
+  .cart-info span{ font-size:.76rem; color:var(--muted); }
+  .cart-qty{
+    width:66px; padding:8px; border:1px solid var(--line); border-radius:6px;
+    text-align:center; font-family:inherit; font-size:.9rem; flex-shrink:0;
+  }
+  .manage-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:10px 0; border-bottom:1px solid var(--line);
+  }
+  .manage-row:last-child{ border-bottom:none; }
+  .manage-info{ display:flex; flex-direction:column; gap:2px; font-size:.85rem; }
+  .manage-info span{ color:var(--muted); font-size:.78rem; }
+  .manage-info-edit{ display:flex; flex-direction:column; gap:8px; flex:1; }
+  .manage-info-edit label{ font-size:.75rem; font-weight:600; color:var(--muted); display:block; }
+  .manage-info-edit input, .manage-info-edit select{
+    width:100%; margin-top:3px; padding:7px 9px; border:1px solid var(--line); border-radius:6px; font-family:inherit;
+  }
+  .edit-row{ flex-direction:column; align-items:stretch; }
+  .row-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .chk{ display:flex; align-items:center; gap:6px; font-size:.82rem; font-weight:600; }
+  .chk input{ width:auto; }
+  #adminGate{
+    position:fixed; inset:0; background:rgba(30,27,22,.6);
+    display:flex; align-items:center; justify-content:center; z-index:20; padding:20px;
+  }
+  .gate-card{ background:var(--card); border-radius:14px; padding:26px 22px; width:min(320px,100%); text-align:center; }
+  .gate-card h2{ margin:0 0 6px; font-size:1.05rem; }
+  .gate-card p{ margin:0 0 16px; font-size:.8rem; color:var(--muted); }
+  #toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:8px;
+    font-size:.85rem; opacity:0; pointer-events:none; transition:all .25s ease; z-index:50; max-width:90%; text-align:center;
+  }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="app-shell">
 
-// ---------- helpers ----------
-const rupiah = (n) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(n) ? n : 0);
+  <header class="topbar">
+    <h1>Kuliner</h1>
+  </header>
 
-const pad2 = (n) => String(n).padStart(2, "0");
+  <div id="demoBanner" class="demo-banner hidden">
+     &amp;
+  </div>
 
-const isoDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-const isoMonth = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="input">Input</button>
+    <button class="tab-btn" data-tab="riwayat">Riwayat</button>
+    <button class="tab-btn" data-tab="setting">Setting</button>
+  </nav>
 
-const dateLabelLong = (isoStr) => {
-  const d = new Date(isoStr);
-  return d.toLocaleDateString("id-ID", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-};
-const timeLabel = (isoStr) => {
-  const d = new Date(isoStr);
-  return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-};
+  <div class="summary-bar">
+    <div class="summary-stat omzet">
+      <div class="label">Omzet bulan ini</div>
+      <div class="value" id="sumOmzet">Rp 0</div>
+    </div>
+    <div class="summary-stat laba">
+      <div class="label">Laba bulan ini</div>
+      <div class="value" id="sumLaba">Rp 0</div>
+    </div>
+  </div>
 
-const monthLabel = (isoMonthStr) => {
-  const [y, m] = isoMonthStr.split("-").map(Number);
-  const d = new Date(y, m - 1, 1);
-  return d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
-};
+  <main>
 
-const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+    <!-- ===================== TAB: INPUT (tanpa login) ===================== -->
+    <section id="section-input" class="tab-section">
+      <div class="card">
+        <h2>Catatan penjualan</h2>
+        <p style="font-size:.78rem;color:var(--muted);margin:-6px 0 12px;">Isi jumlah untuk setiap produk yang terjual.</p>
+        <div id="productCartList"></div>
 
-const DEFAULT_SETTINGS = {
-  products: [],
-  pegawaiInti: ["", "", ""],
-  helper: ["", "", "", ""],
-  rateInti: 15000,
-  rateHelper: 10000,
-  bonusPerItem: 500,
-};
+        <div class="static-row strong">
+          <span class="label">Total harga</span>
+          <span class="value" id="dispTotal">Rp 0</span>
+        </div>
 
-function downloadCsv(filename, rows) {
-  const csv = rows
-    .map((row) =>
-      row
-        .map((cell) => {
-          const s = String(cell ?? "");
-          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-            return `"${s.replace(/"/g, '""')}"`;
-          }
-          return s;
-        })
-        .join(",")
-    )
-    .join("\r\n");
-  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+        <hr class="divider">
+
+        <div class="field">
+          <label for="selPegawai">Pegawai</label>
+          <select id="selPegawai"><option value="">Pilih pegawai…</option></select>
+        </div>
+        <div id="empGajiInfo" class="hidden">
+          <div class="static-row">
+            <span class="label">Gaji pokok</span>
+            <span class="value" id="dispGajiPokok">Rp 0</span>
+          </div>
+          <div class="static-row">
+            <span class="label">Bonus penjualan</span>
+            <span class="value" id="dispBonus">Rp 0</span>
+          </div>
+          <div class="static-row strong">
+            <span class="label">Total gaji</span>
+            <span class="value" id="dispTotalGaji">Rp 0</span>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="field">
+          <label for="inpOmzet">Omzet</label>
+          <input type="number" id="inpOmzet" placeholder="0">
+        </div>
+        <div class="field">
+          <label for="inpLaba">Laba (sebelum potongan)</label>
+          <input type="number" id="inpLaba" placeholder="0">
+        </div>
+        <div class="static-row">
+          <span class="label">Potongan penggunaan alat (15%)</span>
+          <span class="value" id="dispPotongan">Rp 0</span>
+        </div>
+        <div class="static-row strong">
+          <span class="label">Laba bersih</span>
+          <span class="value" id="dispLabaBersih">Rp 0</span>
+        </div>
+
+        <div class="big-total">
+          <div class="label">Total laba bersih hari ini</div>
+          <div class="value" id="dispTotalLabaHariIni">Rp 0</div>
+        </div>
+
+        <button class="btn btn-primary" id="btnSimpanPenjualan">Simpan penjualan</button>
+      </div>
+    </section>
+
+    <!-- ===================== TAB: RIWAYAT ===================== -->
+    <section id="section-riwayat" class="tab-section hidden">
+      <div class="card">
+        <h2>Riwayat penjualan</h2>
+        <div class="chip-row" id="filterChips">
+          <button class="chip" data-filter="today">Hari ini</button>
+          <button class="chip active" data-filter="month">Bulan ini</button>
+          <button class="chip" data-filter="all">Semua</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tanggal</th><th>Produk</th><th>Total harga</th>
+                <th>Pegawai</th><th>Gaji+Bonus</th><th>Omzet</th><th>Laba bersih</th>
+              </tr>
+            </thead>
+            <tbody id="tblRiwayatBody"></tbody>
+            <tfoot id="tblRiwayatFoot"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Rekap harian</h3>
+        <div class="field">
+          <label for="inpTanggalHarian">Pilih tanggal</label>
+          <input type="date" id="inpTanggalHarian">
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-outline" id="btnPdfHarian">Unduh PDF</button>
+          <button class="btn btn-outline" id="btnExcelHarian">Unduh Excel</button>
+        </div>
+
+        <h3>Rekap bulanan</h3>
+        <div class="field">
+          <label for="inpBulanBulanan">Pilih bulan</label>
+          <input type="month" id="inpBulanBulanan">
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-outline" id="btnPdfBulanan">Unduh PDF</button>
+          <button class="btn btn-outline" id="btnExcelBulanan">Unduh Excel</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== TAB: SETTING (khusus admin) ===================== -->
+    <section id="section-setting" class="tab-section hidden">
+      <div id="settingContent" class="hidden">
+
+        <div class="card">
+          <h2>Produk</h2>
+          <div class="field">
+            <label>Nama produk</label>
+            <input type="text" id="newProdName" placeholder="mis. Nasi Goreng">
+          </div>
+          <div class="field">
+            <label>Harga</label>
+            <input type="number" id="newProdPrice" placeholder="0">
+          </div>
+          <label class="chk"><input type="checkbox" id="newProdBonus"> Tandai sebagai barang bonus</label>
+          <button class="btn btn-primary" id="btnAddProduk">Tambah produk</button>
+          <div id="listProduk" style="margin-top:14px;"></div>
+        </div>
+
+        <div class="card">
+          <h2>Pegawai</h2>
+          <button class="btn btn-outline" id="btnSeedPegawai">Isi pegawai default (3 inti + 4 helper)</button>
+          <div style="height:14px;"></div>
+          <div class="field">
+            <label>Nama pegawai</label>
+            <input type="text" id="newEmpName" placeholder="mis. Pegawai Inti 1">
+          </div>
+          <div class="field">
+            <label>Peran</label>
+            <select id="newEmpRole">
+              <option value="inti">Pegawai inti (Rp 15.000)</option>
+              <option value="helper">Helper (Rp 10.000)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Gaji pokok</label>
+            <input type="number" id="newEmpSalary" value="15000">
+          </div>
+          <button class="btn btn-primary" id="btnAddPegawai">Tambah pegawai</button>
+          <div id="listPegawai" style="margin-top:14px;"></div>
+        </div>
+
+        <div class="card">
+          <h2>Kelola riwayat</h2>
+          <p style="font-size:.8rem;color:var(--muted);margin-top:-6px;">Ubah atau hapus data penjualan yang sudah tersimpan. Ini satu-satunya tempat riwayat bisa diedit atau dihapus.</p>
+          <div id="listKelolaRiwayat"></div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="adminGate">
+  <div class="gate-card">
+    <h2>Masuk sebagai admin</h2>
+    <p>Masukkan PIN untuk mengubah pengaturan.</p>
+    <div class="field">
+      <input type="password" id="pinInput" placeholder="PIN admin" inputmode="numeric">
+    </div>
+    <button class="btn btn-primary" id="btnPinSubmit">Masuk</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   KONFIGURASI — isi dengan kredensial proyek Supabase Anda.
+   Jalankan supabase-schema.sql di SQL editor Supabase dulu.
+   ========================================================= */
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
+const ADMIN_PIN = "1234"; // ganti PIN admin di sini
+const BONUS_PER_ITEM = 500;
+const POTONGAN_ALAT_PERSEN = 0.15; // potongan penggunaan alat 15% dari laba
+
+let supabaseClient = null;
+if(SUPABASE_URL && !SUPABASE_URL.includes('YOUR-PROJECT') && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('YOUR-ANON-KEY')){
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} else {
+  document.addEventListener('DOMContentLoaded', ()=>document.getElementById('demoBanner').classList.remove('hidden'));
 }
 
-// ---------- main app ----------
-export default function App() {
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
-  const [tab, setTab] = useState("input");
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [history, setHistory] = useState([]);
-  const [quantities, setQuantities] = useState({});
-  const [selectedPegawai, setSelectedPegawai] = useState({});
-  const [toast, setToast] = useState(null);
-  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved
-  const [expandedId, setExpandedId] = useState(null);
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [newProduct, setNewProduct] = useState({ nama: "", harga: "", bonus: false });
+const memoryDB = { products: [], employees: [], sales: [] };
 
-  const saveTimer = useRef(null);
-  const initialLoadDone = useRef(false);
-
-  const showToast = useCallback((message, kind = "success") => {
-    setToast({ message, kind });
-    setTimeout(() => setToast(null), 2500);
-  }, []);
-
-  // ---- initial load ----
-  useEffect(() => {
-    (async () => {
-      try {
-        let loadedSettings = DEFAULT_SETTINGS;
-        let loadedHistory = [];
-        try {
-          const s = await window.storage.get("kuliner_settings");
-          if (s && s.value) {
-            const parsed = JSON.parse(s.value);
-            loadedSettings = {
-              ...DEFAULT_SETTINGS,
-              ...parsed,
-              pegawaiInti:
-                Array.isArray(parsed.pegawaiInti) && parsed.pegawaiInti.length === 3
-                  ? parsed.pegawaiInti
-                  : DEFAULT_SETTINGS.pegawaiInti,
-              helper:
-                Array.isArray(parsed.helper) && parsed.helper.length === 4
-                  ? parsed.helper
-                  : DEFAULT_SETTINGS.helper,
-            };
-          }
-        } catch (e) {
-          // key not found yet — first run, keep defaults
-        }
-        try {
-          const h = await window.storage.get("kuliner_history");
-          if (h && h.value) {
-            loadedHistory = JSON.parse(h.value);
-          }
-        } catch (e) {
-          // no history yet
-        }
-        setSettings(loadedSettings);
-        setHistory(Array.isArray(loadedHistory) ? loadedHistory : []);
-      } catch (e) {
-        console.error("Gagal memuat data:", e);
-        setLoadError(true);
-      } finally {
-        setLoading(false);
-        initialLoadDone.current = true;
-      }
-    })();
-  }, []);
-
-  // ---- autosave settings (debounced) ----
-  useEffect(() => {
-    if (!initialLoadDone.current) return;
-    setSaveStatus("saving");
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        const result = await window.storage.set(
-          "kuliner_settings",
-          JSON.stringify(settings)
-        );
-        if (!result) throw new Error("Storage operation failed");
-        setSaveStatus("saved");
-        setTimeout(() => setSaveStatus("idle"), 1500);
-      } catch (e) {
-        console.error("Gagal menyimpan pengaturan:", e);
-        setSaveStatus("idle");
-        showToast("Gagal menyimpan pengaturan", "error");
-      }
-    }, 600);
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings]);
-
-  const persistHistory = async (nextHistory) => {
-    try {
-      const result = await window.storage.set(
-        "kuliner_history",
-        JSON.stringify(nextHistory)
-      );
-      if (!result) throw new Error("Storage operation failed");
+const db = {
+  async list(table){
+    if(supabaseClient){
+      const { data, error } = await supabaseClient.from(table).select('*').order('created_at',{ascending:false});
+      if(error) throw error;
+      return data || [];
+    }
+    return memoryDB[table].slice();
+  },
+  async insert(table, row){
+    if(supabaseClient){
+      const { data, error } = await supabaseClient.from(table).insert(row).select().single();
+      if(error) throw error;
+      return data;
+    }
+    const newRow = { ...row, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    memoryDB[table].unshift(newRow);
+    return newRow;
+  },
+  async update(table, id, patch){
+    if(supabaseClient){
+      const { data, error } = await supabaseClient.from(table).update(patch).eq('id', id).select().single();
+      if(error) throw error;
+      return data;
+    }
+    const idx = memoryDB[table].findIndex(r=>r.id===id);
+    if(idx>-1){ memoryDB[table][idx] = { ...memoryDB[table][idx], ...patch }; return memoryDB[table][idx]; }
+  },
+  async remove(table, id){
+    if(supabaseClient){
+      const { error } = await supabaseClient.from(table).delete().eq('id', id);
+      if(error) throw error;
       return true;
-    } catch (e) {
-      console.error("Gagal menyimpan riwayat:", e);
-      showToast("Gagal menyimpan transaksi", "error");
-      return false;
     }
-  };
+    memoryDB[table] = memoryDB[table].filter(r=>r.id!==id);
+    return true;
+  }
+};
 
-  // ---- derived calculations for Input tab ----
-  const products = settings.products || [];
-  const itemRows = products.map((p) => {
-    const jumlah = Number(quantities[p.id] || 0);
-    return { ...p, jumlah, subtotal: jumlah * Number(p.harga || 0) };
+const state = {
+  products: [],
+  employees: [],
+  sales: [],
+  editingProductId: null,
+  editingEmployeeId: null,
+  editingSaleId: null,
+  adminUnlocked: false,
+  filter: 'month'
+};
+
+/* ---------- Utilities ---------- */
+function rupiah(n){ return 'Rp ' + Math.round(Number(n)||0).toLocaleString('id-ID'); }
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function todayStr(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function currentYearMonth(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function isToday(dateStr){ return dateStr === todayStr(); }
+function isCurrentMonth(dateStr){ return !!dateStr && dateStr.slice(0,7) === currentYearMonth(); }
+function itemsSummary(items){
+  return (items||[]).map(it=>`${it.name} ×${it.qty}`).join(', ') || '-';
+}
+let toastTimer = null;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 2600);
+}
+
+/* ---------- Init ---------- */
+async function init(){
+  state.products = await db.list('products');
+  state.employees = await db.list('employees');
+  state.sales = await db.list('sales');
+
+  if(!supabaseClient && state.products.length===0 && state.employees.length===0){
+    state.products.push(await db.insert('products', { name:'Nasi Goreng', price:15000, is_bonus:true }));
+    state.products.push(await db.insert('products', { name:'Es Teh Manis', price:5000, is_bonus:false }));
+    state.employees.push(await db.insert('employees', { name:'Pegawai Inti 1', role:'inti', base_salary:15000 }));
+    state.employees.push(await db.insert('employees', { name:'Helper 1', role:'helper', base_salary:10000 }));
+  }
+
+  document.getElementById('inpTanggalHarian').value = todayStr();
+  document.getElementById('inpBulanBulanan').value = currentYearMonth();
+
+  renderProductCart();
+  renderPegawaiDropdown();
+  recomputeInputPreview();
+  renderSummary();
+  renderRiwayat();
+  renderTotalLabaHariIni();
+  renderProdukList();
+  renderPegawaiList();
+  renderKelolaRiwayat();
+}
+
+/* ---------- Tabs (Input & Riwayat tanpa login, Setting pakai PIN) ---------- */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>switchTab(btn.dataset.tab));
+});
+function switchTab(name){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  document.querySelectorAll('.tab-section').forEach(s=>s.classList.toggle('hidden', s.id !== 'section-'+name));
+  if(name === 'setting'){
+    state.adminUnlocked = false;
+    document.getElementById('settingContent').classList.add('hidden');
+    document.getElementById('pinInput').value = '';
+    document.getElementById('adminGate').classList.remove('hidden');
+  }
+}
+document.getElementById('btnPinSubmit').addEventListener('click', checkPin);
+document.getElementById('pinInput').addEventListener('keydown', e=>{ if(e.key==='Enter') checkPin(); });
+function checkPin(){
+  const val = document.getElementById('pinInput').value;
+  if(val === ADMIN_PIN){
+    state.adminUnlocked = true;
+    document.getElementById('adminGate').classList.add('hidden');
+    document.getElementById('settingContent').classList.remove('hidden');
+    renderProdukList(); renderPegawaiList(); renderKelolaRiwayat();
+  } else {
+    toast('PIN salah');
+  }
+}
+
+/* ---------- Daftar produk di Input (langsung tampil semua, isi jumlah saja) ---------- */
+function renderProductCart(){
+  const wrap = document.getElementById('productCartList');
+  wrap.innerHTML = state.products.map(p=>`
+    <div class="cart-row">
+      <div class="cart-info">
+        <strong>${escapeHtml(p.name)}</strong>
+        <span>${rupiah(p.price)}${p.is_bonus?' • Bonus':''}</span>
+      </div>
+      <input type="number" class="cart-qty" min="0" placeholder="0" data-id="${p.id}">
+    </div>
+  `).join('') || '<p class="empty-note">Belum ada produk. Tambahkan lewat menu Setting.</p>';
+}
+document.getElementById('productCartList').addEventListener('input', e=>{
+  if(e.target.classList.contains('cart-qty')) recomputeInputPreview();
+});
+
+function renderPegawaiDropdown(){
+  const sel = document.getElementById('selPegawai');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Pilih pegawai…</option>' +
+    state.employees.map(e=>`<option value="${e.id}">${escapeHtml(e.name)} (${e.role==='inti'?'Inti':'Helper'})</option>`).join('');
+  if(state.employees.some(e=>e.id===current)) sel.value = current;
+}
+
+/* ---------- Perhitungan real-time di tab Input ---------- */
+const selPegawai = document.getElementById('selPegawai');
+const inpOmzet = document.getElementById('inpOmzet');
+const inpLaba = document.getElementById('inpLaba');
+
+function getCartItems(){
+  const items = [];
+  document.querySelectorAll('.cart-qty').forEach(inp=>{
+    const qty = parseInt(inp.value) || 0;
+    if(qty <= 0) return;
+    const product = state.products.find(p=>p.id===inp.dataset.id);
+    if(!product) return;
+    items.push({
+      product_id: product.id,
+      name: product.name,
+      price: Number(product.price),
+      qty,
+      subtotal: Number(product.price) * qty,
+      is_bonus: !!product.is_bonus
+    });
   });
-  const omzet = itemRows.reduce((sum, r) => sum + r.subtotal, 0);
-  const bonusItemCount = itemRows.reduce(
-    (sum, r) => sum + (r.bonus ? r.jumlah : 0),
-    0
-  );
+  return items;
+}
 
-  // Employee list built from names entered in Setting. Only named slots are
-  // selectable/paid; a checkbox lets you mark who actually worked today.
-  const pegawaiList = [
-    ...settings.pegawaiInti.map((nm, i) => ({
-      key: `inti-${i}`,
-      nama: (nm || "").trim(),
-      rate: Number(settings.rateInti || 0),
-      type: "inti",
-    })),
-    ...settings.helper.map((nm, i) => ({
-      key: `helper-${i}`,
-      nama: (nm || "").trim(),
-      rate: Number(settings.rateHelper || 0),
-      type: "helper",
-    })),
+function recomputeInputPreview(){
+  const items = getCartItems();
+  const totalHarga = items.reduce((sum,it)=>sum+it.subtotal,0);
+  const bonusQty = items.filter(it=>it.is_bonus).reduce((sum,it)=>sum+it.qty,0);
+
+  document.getElementById('dispTotal').textContent = rupiah(totalHarga);
+  inpOmzet.value = totalHarga || '';
+
+  const emp = state.employees.find(e=>e.id===selPegawai.value);
+  const empGajiInfo = document.getElementById('empGajiInfo');
+  if(emp){
+    empGajiInfo.classList.remove('hidden');
+    const gajiPokok = Number(emp.base_salary);
+    const bonus = bonusQty * BONUS_PER_ITEM;
+    document.getElementById('dispGajiPokok').textContent = rupiah(gajiPokok);
+    document.getElementById('dispBonus').textContent = rupiah(bonus);
+    document.getElementById('dispTotalGaji').textContent = rupiah(gajiPokok + bonus);
+  } else {
+    empGajiInfo.classList.add('hidden');
+  }
+  recomputeLaba();
+}
+selPegawai.addEventListener('change', recomputeInputPreview);
+
+function recomputeLaba(){
+  const labaKotor = Number(inpLaba.value) || 0;
+  const potongan = labaKotor * POTONGAN_ALAT_PERSEN;
+  const labaBersih = labaKotor - potongan;
+  document.getElementById('dispPotongan').textContent = rupiah(potongan);
+  document.getElementById('dispLabaBersih').textContent = rupiah(labaBersih);
+}
+inpLaba.addEventListener('input', recomputeLaba);
+
+function renderTotalLabaHariIni(){
+  const total = state.sales.filter(s=>isToday(s.sale_date)).reduce((sum,s)=>sum+Number(s.laba_bersih||0),0);
+  document.getElementById('dispTotalLabaHariIni').textContent = rupiah(total);
+}
+
+document.getElementById('btnSimpanPenjualan').addEventListener('click', simpanPenjualan);
+async function simpanPenjualan(){
+  const items = getCartItems();
+  const emp = state.employees.find(e=>e.id===selPegawai.value);
+
+  if(items.length === 0){ toast('Isi jumlah minimal satu produk'); return; }
+  if(!emp){ toast('Pilih pegawai terlebih dahulu'); return; }
+
+  const totalHarga = items.reduce((sum,it)=>sum+it.subtotal,0);
+  const bonusQty = items.filter(it=>it.is_bonus).reduce((sum,it)=>sum+it.qty,0);
+  const gajiPokok = Number(emp.base_salary);
+  const bonus = bonusQty * BONUS_PER_ITEM;
+  const totalGaji = gajiPokok + bonus;
+  const omzet = Number(inpOmzet.value) || totalHarga;
+  const labaKotor = Number(inpLaba.value) || 0;
+  const potongan = labaKotor * POTONGAN_ALAT_PERSEN;
+  const labaBersih = labaKotor - potongan;
+
+  const row = {
+    sale_date: todayStr(),
+    items,
+    total_harga: totalHarga,
+    employee_id: emp.id,
+    employee_name: emp.name,
+    employee_role: emp.role,
+    base_salary: gajiPokok,
+    bonus,
+    total_gaji: totalGaji,
+    omzet,
+    laba_kotor: labaKotor,
+    potongan_alat: potongan,
+    laba_bersih: labaBersih
+  };
+
+  try{
+    const saved = await db.insert('sales', row);
+    state.sales.unshift(saved);
+    toast('Penjualan disimpan');
+    document.querySelectorAll('.cart-qty').forEach(inp=>inp.value='');
+    selPegawai.value = '';
+    inpLaba.value = '';
+    recomputeInputPreview();
+    renderSummary();
+    renderRiwayat();
+    renderTotalLabaHariIni();
+    renderKelolaRiwayat();
+  }catch(err){
+    console.error(err);
+    toast('Gagal menyimpan: ' + err.message);
+  }
+}
+
+/* ---------- Summary bar bulan berjalan (otomatis nol tiap bulan baru) ---------- */
+function renderSummary(){
+  const rows = state.sales.filter(s=>isCurrentMonth(s.sale_date));
+  const omzet = rows.reduce((sum,s)=>sum+Number(s.omzet||0),0);
+  const laba = rows.reduce((sum,s)=>sum+Number(s.laba_bersih||0),0);
+  document.getElementById('sumOmzet').textContent = rupiah(omzet);
+  document.getElementById('sumLaba').textContent = rupiah(laba);
+}
+
+/* ---------- Riwayat (tanpa edit/hapus di sini) ---------- */
+document.getElementById('filterChips').addEventListener('click', e=>{
+  const chip = e.target.closest('.chip'); if(!chip) return;
+  state.filter = chip.dataset.filter;
+  document.querySelectorAll('#filterChips .chip').forEach(c=>c.classList.toggle('active', c===chip));
+  renderRiwayat();
+});
+function getSalesForRange(range){
+  if(range==='today') return state.sales.filter(s=>isToday(s.sale_date));
+  if(range==='month') return state.sales.filter(s=>isCurrentMonth(s.sale_date));
+  return state.sales.slice();
+}
+function renderRiwayat(){
+  const rows = getSalesForRange(state.filter);
+  const body = document.getElementById('tblRiwayatBody');
+  const foot = document.getElementById('tblRiwayatFoot');
+  body.innerHTML = rows.map(s=>`
+    <tr>
+      <td>${s.sale_date}</td>
+      <td class="produk-col">${escapeHtml(itemsSummary(s.items))}</td>
+      <td>${rupiah(s.total_harga)}</td>
+      <td>${escapeHtml(s.employee_name||'-')}</td>
+      <td>${rupiah(s.total_gaji)}</td>
+      <td>${rupiah(s.omzet)}</td>
+      <td class="profit">${rupiah(s.laba_bersih)}</td>
+    </tr>`).join('') || `<tr><td colspan="7" class="empty-note">Belum ada data.</td></tr>`;
+
+  const totalOmzet = rows.reduce((sum,s)=>sum+Number(s.omzet||0),0);
+  const totalLaba = rows.reduce((sum,s)=>sum+Number(s.laba_bersih||0),0);
+  foot.innerHTML = rows.length ? `<tr><td colspan="5">Total</td><td>${rupiah(totalOmzet)}</td><td>${rupiah(totalLaba)}</td></tr>` : '';
+}
+
+/* ---------- Rekap harian (pilih tanggal) & bulanan (pilih bulan) ---------- */
+function getSalesByDate(dateStr){ return state.sales.filter(s=>s.sale_date===dateStr); }
+function getSalesByMonth(yearMonth){ return state.sales.filter(s=> (s.sale_date||'').slice(0,7)===yearMonth); }
+
+document.getElementById('btnPdfHarian').addEventListener('click', ()=>{
+  const d = document.getElementById('inpTanggalHarian').value || todayStr();
+  exportPDF(getSalesByDate(d), `Rekap Harian — ${d}`, `kuliner-rekap-harian-${d}`);
+});
+document.getElementById('btnExcelHarian').addEventListener('click', ()=>{
+  const d = document.getElementById('inpTanggalHarian').value || todayStr();
+  exportExcel(getSalesByDate(d), `kuliner-rekap-harian-${d}`);
+});
+document.getElementById('btnPdfBulanan').addEventListener('click', ()=>{
+  const ym = document.getElementById('inpBulanBulanan').value || currentYearMonth();
+  exportPDF(getSalesByMonth(ym), `Rekap Bulanan — ${ym}`, `kuliner-rekap-bulanan-${ym}`);
+});
+document.getElementById('btnExcelBulanan').addEventListener('click', ()=>{
+  const ym = document.getElementById('inpBulanBulanan').value || currentYearMonth();
+  exportExcel(getSalesByMonth(ym), `kuliner-rekap-bulanan-${ym}`);
+});
+
+function exportPDF(rows, title, filename){
+  if(!rows.length){ toast('Tidak ada data untuk tanggal/bulan tersebut'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(14); doc.text(`Kuliner — ${title}`, 14, 15);
+
+  const body = rows.map(s=>[s.sale_date, itemsSummary(s.items), rupiah(s.total_harga), s.employee_name||'-', rupiah(s.total_gaji), rupiah(s.omzet), rupiah(s.laba_bersih)]);
+  doc.autoTable({
+    head: [['Tanggal','Produk','Total harga','Pegawai','Gaji+Bonus','Omzet','Laba bersih']],
+    body, startY: 22, styles:{ fontSize:8 }
+  });
+
+  const totalOmzet = rows.reduce((sum,s)=>sum+Number(s.omzet||0),0);
+  const totalLaba = rows.reduce((sum,s)=>sum+Number(s.laba_bersih||0),0);
+  const finalY = doc.lastAutoTable.finalY || 30;
+  doc.setFontSize(10);
+  doc.text(`Total Omzet: ${rupiah(totalOmzet)}`, 14, finalY + 8);
+  doc.text(`Total Laba Bersih: ${rupiah(totalLaba)}`, 14, finalY + 14);
+  doc.save(`${filename}.pdf`);
+}
+function exportExcel(rows, filename){
+  if(!rows.length){ toast('Tidak ada data untuk tanggal/bulan tersebut'); return; }
+  const ringkasan = rows.map(s=>({
+    Tanggal:s.sale_date, Produk:itemsSummary(s.items), 'Total Harga':s.total_harga,
+    Pegawai:s.employee_name, 'Gaji+Bonus':s.total_gaji, Omzet:s.omzet,
+    'Laba Kotor':s.laba_kotor, 'Potongan Alat (15%)':s.potongan_alat, 'Laba Bersih':s.laba_bersih
+  }));
+  const detail = [];
+  rows.forEach(s=>{
+    (s.items||[]).forEach(it=>{
+      detail.push({
+        Tanggal:s.sale_date, Produk:it.name, Harga:it.price, Jumlah:it.qty, Subtotal:it.subtotal, Pegawai:s.employee_name
+      });
+    });
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ringkasan), 'Ringkasan');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), 'Detail Produk');
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
+/* ---------- Setting: Produk ---------- */
+document.getElementById('btnAddProduk').addEventListener('click', async ()=>{
+  const name = document.getElementById('newProdName').value.trim();
+  const price = Number(document.getElementById('newProdPrice').value) || 0;
+  const isBonus = document.getElementById('newProdBonus').checked;
+  if(!name){ toast('Nama produk wajib diisi'); return; }
+  const saved = await db.insert('products', { name, price, is_bonus:isBonus });
+  state.products.unshift(saved);
+  document.getElementById('newProdName').value='';
+  document.getElementById('newProdPrice').value='';
+  document.getElementById('newProdBonus').checked=false;
+  renderProdukList(); renderProductCart(); recomputeInputPreview();
+  toast('Produk ditambahkan');
+});
+function renderProdukList(){
+  const wrap = document.getElementById('listProduk');
+  wrap.innerHTML = state.products.map(p=>{
+    if(state.editingProductId === p.id){
+      return `<div class="manage-row edit-row" data-id="${p.id}">
+        <div class="manage-info-edit">
+          <label>Nama <input type="text" class="edit-name" value="${escapeHtml(p.name)}"></label>
+          <label>Harga <input type="number" class="edit-price" value="${p.price}"></label>
+          <label class="chk"><input type="checkbox" class="edit-bonus" ${p.is_bonus?'checked':''}> Barang bonus</label>
+        </div>
+        <div class="row-actions">
+          <button class="btn btn-primary btn-sm" data-action="save" data-id="${p.id}">Simpan</button>
+          <button class="btn btn-outline btn-sm" data-action="cancel" data-id="${p.id}">Batal</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="manage-row" data-id="${p.id}">
+      <div class="manage-info">
+        <strong>${escapeHtml(p.name)}</strong>
+        <span>${rupiah(p.price)}${p.is_bonus?' • Bonus':''}</span>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-outline btn-sm" data-action="edit" data-id="${p.id}">Ubah</button>
+        <button class="btn btn-danger btn-sm" data-action="delete" data-id="${p.id}">Hapus</button>
+      </div>
+    </div>`;
+  }).join('') || '<p class="empty-note">Belum ada produk.</p>';
+}
+document.getElementById('listProduk').addEventListener('click', async e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  const id = btn.dataset.id, action = btn.dataset.action;
+  if(action==='edit'){ state.editingProductId=id; renderProdukList(); }
+  else if(action==='cancel'){ state.editingProductId=null; renderProdukList(); }
+  else if(action==='delete'){
+    if(confirm('Hapus produk ini?')){
+      await db.remove('products', id);
+      state.products = state.products.filter(p=>p.id!==id);
+      renderProdukList(); renderProductCart(); recomputeInputPreview();
+      toast('Produk dihapus');
+    }
+  } else if(action==='save'){
+    const row = e.target.closest('.edit-row');
+    const name = row.querySelector('.edit-name').value.trim();
+    const price = Number(row.querySelector('.edit-price').value) || 0;
+    const isBonus = row.querySelector('.edit-bonus').checked;
+    if(!name){ toast('Nama produk wajib diisi'); return; }
+    const updated = await db.update('products', id, { name, price, is_bonus:isBonus });
+    const idx = state.products.findIndex(p=>p.id===id);
+    state.products[idx] = updated;
+    state.editingProductId = null;
+    renderProdukList(); renderProductCart(); recomputeInputPreview();
+    toast('Produk diperbarui');
+  }
+});
+
+/* ---------- Setting: Pegawai ---------- */
+document.getElementById('newEmpRole').addEventListener('change', e=>{
+  document.getElementById('newEmpSalary').value = e.target.value==='inti' ? 15000 : 10000;
+});
+document.getElementById('btnSeedPegawai').addEventListener('click', async ()=>{
+  if(state.employees.length>0 && !confirm('Sudah ada data pegawai. Tetap tambahkan 3 inti + 4 helper baru?')) return;
+  const defaults = [
+    {name:'Pegawai Inti 1', role:'inti', base_salary:15000},
+    {name:'Pegawai Inti 2', role:'inti', base_salary:15000},
+    {name:'Pegawai Inti 3', role:'inti', base_salary:15000},
+    {name:'Helper 1', role:'helper', base_salary:10000},
+    {name:'Helper 2', role:'helper', base_salary:10000},
+    {name:'Helper 3', role:'helper', base_salary:10000},
+    {name:'Helper 4', role:'helper', base_salary:10000},
   ];
-  const isPegawaiSelected = (key, hasName) =>
-    selectedPegawai[key] !== undefined ? selectedPegawai[key] : hasName;
-  const togglePegawai = (key, hasName) => {
-    if (!hasName) return;
-    setSelectedPegawai((s) => ({
-      ...s,
-      [key]: !isPegawaiSelected(key, hasName),
-    }));
-  };
-
-  const hadirInti = pegawaiList.filter(
-    (p) => p.type === "inti" && p.nama && isPegawaiSelected(p.key, true)
-  );
-  const hadirHelper = pegawaiList.filter(
-    (p) => p.type === "helper" && p.nama && isPegawaiSelected(p.key, true)
-  );
-  const gajiIntiTotal = hadirInti.length * Number(settings.rateInti || 0);
-  const gajiHelperTotal = hadirHelper.length * Number(settings.rateHelper || 0);
-  const bonusTotal = bonusItemCount * Number(settings.bonusPerItem || 0);
-  const totalHadirCount = hadirInti.length + hadirHelper.length;
-  const bonusPerPegawai = totalHadirCount > 0 ? bonusTotal / totalHadirCount : 0;
-  const totalGaji = gajiIntiTotal + gajiHelperTotal + bonusTotal;
-  const totalLaba = omzet - totalGaji;
-  const adaTransaksi = itemRows.some((r) => r.jumlah > 0);
-
-  // ---- current-month running totals (reset automatically each new month) ----
-  const currentMonthStr = isoMonth(new Date());
-  const monthRecords = history.filter(
-    (r) => isoMonth(new Date(r.dateISO)) === currentMonthStr
-  );
-  const monthOmzet = monthRecords.reduce((s, r) => s + r.omzet, 0);
-  const monthLaba = monthRecords.reduce((s, r) => s + r.laba, 0);
-
-  const setQty = (id, val) => {
-    const n = Math.max(0, Math.floor(Number(val) || 0));
-    setQuantities((q) => ({ ...q, [id]: n }));
-  };
-
-  const handleSimpanTransaksi = async () => {
-    if (!adaTransaksi) {
-      showToast("Isi jumlah terjual dulu ya", "error");
-      return;
-    }
-    const now = new Date();
-    const record = {
-      id: uid(),
-      dateISO: now.toISOString(),
-      items: itemRows
-        .filter((r) => r.jumlah > 0)
-        .map((r) => ({
-          nama: r.nama,
-          harga: Number(r.harga || 0),
-          jumlah: r.jumlah,
-          subtotal: r.subtotal,
-          bonus: !!r.bonus,
-        })),
-      omzet,
-      gajiInti: gajiIntiTotal,
-      gajiHelper: gajiHelperTotal,
-      pegawaiIntiHadir: hadirInti.map((p) => p.nama),
-      pegawaiHelperHadir: hadirHelper.map((p) => p.nama),
-      bonus: bonusTotal,
-      bonusItemCount,
-      totalGaji,
-      laba: totalLaba,
-    };
-    const next = [record, ...history];
-    setHistory(next);
-    const ok = await persistHistory(next);
-    if (ok) {
-      setQuantities({});
-      setSelectedPegawai({});
-      showToast("Transaksi hari ini tersimpan");
-    }
-  };
-
-  // ---- product management ----
-  const addProduct = () => {
-    const nama = newProduct.nama.trim();
-    const harga = Number(newProduct.harga);
-    if (!nama) {
-      showToast("Nama menu belum diisi", "error");
-      return;
-    }
-    if (!harga || harga <= 0) {
-      showToast("Harga menu belum valid", "error");
-      return;
-    }
-    setSettings((s) => ({
-      ...s,
-      products: [
-        ...s.products,
-        { id: uid(), nama, harga, bonus: !!newProduct.bonus },
-      ],
-    }));
-    setNewProduct({ nama: "", harga: "", bonus: false });
-  };
-
-  const updateProduct = (id, patch) => {
-    setSettings((s) => ({
-      ...s,
-      products: s.products.map((p) => (p.id === id ? { ...p, ...patch } : p)),
-    }));
-  };
-
-  const removeProduct = (id) => {
-    setSettings((s) => ({
-      ...s,
-      products: s.products.filter((p) => p.id !== id),
-    }));
-    setQuantities((q) => {
-      const nq = { ...q };
-      delete nq[id];
-      return nq;
-    });
-  };
-
-  const updatePegawaiInti = (idx, val) => {
-    setSettings((s) => {
-      const arr = [...s.pegawaiInti];
-      arr[idx] = val;
-      return { ...s, pegawaiInti: arr };
-    });
-  };
-  const updateHelper = (idx, val) => {
-    setSettings((s) => {
-      const arr = [...s.helper];
-      arr[idx] = val;
-      return { ...s, helper: arr };
-    });
-  };
-
-  // ---- history / rekap ----
-  const [rekapDate, setRekapDate] = useState(isoDate(new Date()));
-  const [rekapMonth, setRekapMonth] = useState(isoMonth(new Date()));
-
-  const recordsForDate = (dateStr) =>
-    history.filter((r) => isoDate(new Date(r.dateISO)) === dateStr);
-  const recordsForMonth = (monthStr) =>
-    history.filter((r) => isoMonth(new Date(r.dateISO)) === monthStr);
-
-  const handleUnduhHarian = () => {
-    const recs = recordsForDate(rekapDate);
-    if (recs.length === 0) {
-      showToast("Tidak ada transaksi pada tanggal itu", "error");
-      return;
-    }
-    const rows = [
-      ["Rekap Harian Kuliner"],
-      ["Tanggal", rekapDate],
-      [],
-      ["Jam", "Produk", "Harga", "Jumlah", "Subtotal", "Bonus"],
-    ];
-    recs
-      .slice()
-      .reverse()
-      .forEach((r) => {
-        r.items.forEach((it) => {
-          rows.push([
-            timeLabel(r.dateISO),
-            it.nama,
-            it.harga,
-            it.jumlah,
-            it.subtotal,
-            it.bonus ? "Ya" : "",
-          ]);
-        });
-      });
-    const totalOmzet = recs.reduce((s, r) => s + r.omzet, 0);
-    const totalGajiHari = recs.reduce((s, r) => s + r.totalGaji, 0);
-    const totalLabaHari = recs.reduce((s, r) => s + r.laba, 0);
-    rows.push([]);
-    rows.push(["Total Omzet", totalOmzet]);
-    rows.push(["Total Gaji (termasuk bonus)", totalGajiHari]);
-    rows.push(["Total Laba", totalLabaHari]);
-    downloadCsv(`rekap-harian-${rekapDate}.csv`, rows);
-  };
-
-  const handleUnduhBulanan = () => {
-    const recs = recordsForMonth(rekapMonth);
-    if (recs.length === 0) {
-      showToast("Tidak ada transaksi pada bulan itu", "error");
-      return;
-    }
-    const byDate = {};
-    recs.forEach((r) => {
-      const d = isoDate(new Date(r.dateISO));
-      if (!byDate[d]) byDate[d] = { omzet: 0, gaji: 0, laba: 0, jumlahTransaksi: 0 };
-      byDate[d].omzet += r.omzet;
-      byDate[d].gaji += r.totalGaji;
-      byDate[d].laba += r.laba;
-      byDate[d].jumlahTransaksi += 1;
-    });
-    const rows = [
-      ["Rekap Bulanan Kuliner"],
-      ["Bulan", monthLabel(rekapMonth)],
-      [],
-      ["Tanggal", "Jumlah Transaksi", "Omzet", "Total Gaji", "Laba"],
-    ];
-    Object.keys(byDate)
-      .sort()
-      .forEach((d) => {
-        const v = byDate[d];
-        rows.push([d, v.jumlahTransaksi, v.omzet, v.gaji, v.laba]);
-      });
-    const totalOmzet = recs.reduce((s, r) => s + r.omzet, 0);
-    const totalGajiBulan = recs.reduce((s, r) => s + r.totalGaji, 0);
-    const totalLabaBulan = recs.reduce((s, r) => s + r.laba, 0);
-    rows.push([]);
-    rows.push(["Total Omzet", totalOmzet]);
-    rows.push(["Total Gaji (termasuk bonus)", totalGajiBulan]);
-    rows.push(["Total Laba", totalLabaBulan]);
-    downloadCsv(`rekap-bulanan-${rekapMonth}.csv`, rows);
-  };
-
-  const handleClearHistory = async () => {
-    setHistory([]);
-    await persistHistory([]);
-    setConfirmClear(false);
-    showToast("Semua riwayat dihapus");
-  };
-
-  // ---------- render ----------
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F6F2EA]">
-        <div className="flex flex-col items-center gap-3 text-[#6B675F]">
-          <Loader2 className="animate-spin" size={28} />
-          <span className="text-sm">Memuat data...</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#F6F2EA] flex justify-center">
-      <div className="w-full max-w-[440px] min-h-screen bg-[#F6F2EA] flex flex-col relative shadow-xl">
-        {/* Header */}
-        <header className="bg-[#0B4142] px-5 pt-6 pb-8 rounded-b-[28px] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-[#12595B] p-2 rounded-full">
-              <ChefHat size={20} className="text-[#EAF4F1]" />
-            </div>
-            <div>
-              <h1
-                className="text-2xl text-[#EAF4F1] leading-tight"
-                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-              >
-                Kuliner
-              </h1>
-              <p className="text-[11px] text-[#9FC7C2] tracking-wide">
-                Pencatatan penjualan harian
-              </p>
-            </div>
-          </div>
-        </header>
-
-        {/* Monthly summary */}
-        <div className="px-4 -mt-6 mb-1 shrink-0">
-          <div className="bg-white rounded-2xl border border-[#E4DFD3] shadow-sm p-4">
-            <p className="text-[11px] text-[#6B675F] mb-2">
-              {monthLabel(currentMonthStr)}
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-[11px] text-[#6B675F] mb-0.5">Omzet Bulan Ini</p>
-                <p className="text-2xl font-bold text-[#0B4142] tabular-nums leading-tight">
-                  {rupiah(monthOmzet)}
-                </p>
-              </div>
-              <div className="border-l border-[#E4DFD3] pl-3">
-                <p className="text-[11px] text-[#6B675F] mb-0.5">Laba Bulan Ini</p>
-                <p
-                  className={`text-2xl font-bold tabular-nums leading-tight ${
-                    monthLaba >= 0 ? "text-[#2F6F4E]" : "text-[#B3261E]"
-                  }`}
-                >
-                  {rupiah(monthLaba)}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <nav className="flex px-4 mb-1 shrink-0">
-          <div className="flex w-full bg-white rounded-2xl shadow-sm border border-[#E4DFD3] p-1 gap-1">
-            {[
-              { id: "input", label: "Input", icon: ClipboardList },
-              { id: "riwayat", label: "Riwayat", icon: History },
-              { id: "setting", label: "Setting", icon: SettingsIcon },
-            ].map((t) => {
-              const Icon = t.icon;
-              const active = tab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-xs font-medium transition-colors ${
-                    active
-                      ? "bg-[#0B4142] text-white"
-                      : "text-[#6B675F] hover:bg-[#F6F2EA]"
-                  }`}
-                >
-                  <Icon size={17} />
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto px-4 pb-28 pt-2">
-          {tab === "input" && (
-            <InputTab
-              products={products}
-              itemRows={itemRows}
-              setQty={setQty}
-              omzet={omzet}
-              gajiIntiTotal={gajiIntiTotal}
-              gajiHelperTotal={gajiHelperTotal}
-              bonusTotal={bonusTotal}
-              bonusItemCount={bonusItemCount}
-              totalGaji={totalGaji}
-              totalLaba={totalLaba}
-              settings={settings}
-              pegawaiList={pegawaiList}
-              isPegawaiSelected={isPegawaiSelected}
-              togglePegawai={togglePegawai}
-              bonusPerPegawai={bonusPerPegawai}
-              onSimpan={handleSimpanTransaksi}
-              onGoSetting={() => setTab("setting")}
-            />
-          )}
-
-          {tab === "riwayat" && (
-            <RiwayatTab
-              history={history}
-              expandedId={expandedId}
-              setExpandedId={setExpandedId}
-              rekapDate={rekapDate}
-              setRekapDate={setRekapDate}
-              rekapMonth={rekapMonth}
-              setRekapMonth={setRekapMonth}
-              onUnduhHarian={handleUnduhHarian}
-              onUnduhBulanan={handleUnduhBulanan}
-              confirmClear={confirmClear}
-              setConfirmClear={setConfirmClear}
-              onClearHistory={handleClearHistory}
-            />
-          )}
-
-          {tab === "setting" && (
-            <SettingTab
-              settings={settings}
-              setSettings={setSettings}
-              newProduct={newProduct}
-              setNewProduct={setNewProduct}
-              addProduct={addProduct}
-              updateProduct={updateProduct}
-              removeProduct={removeProduct}
-              updatePegawaiInti={updatePegawaiInti}
-              updateHelper={updateHelper}
-              saveStatus={saveStatus}
-            />
-          )}
-        </main>
-
-        {/* Toast */}
-        {toast && (
-          <div
-            className={`absolute bottom-5 left-4 right-4 rounded-xl px-4 py-3 text-sm text-white flex items-center gap-2 shadow-lg ${
-              toast.kind === "error" ? "bg-[#B3261E]" : "bg-[#0B4142]"
-            }`}
-          >
-            {toast.kind === "error" ? (
-              <AlertTriangle size={16} />
-            ) : (
-              <CheckCircle2 size={16} />
-            )}
-            <span>{toast.message}</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------- Input Tab ----------
-function InputTab({
-  products,
-  itemRows,
-  setQty,
-  omzet,
-  gajiIntiTotal,
-  gajiHelperTotal,
-  bonusTotal,
-  bonusItemCount,
-  totalGaji,
-  totalLaba,
-  settings,
-  pegawaiList,
-  isPegawaiSelected,
-  togglePegawai,
-  bonusPerPegawai,
-  onSimpan,
-  onGoSetting,
-}) {
-  const [showRincian, setShowRincian] = useState(true);
-
-  if (products.length === 0) {
-    return (
-      <div className="mt-10 flex flex-col items-center text-center gap-3 px-4">
-        <div className="bg-white border border-[#E4DFD3] rounded-2xl p-6 w-full">
-          <p className="text-[#262624] font-medium mb-1">Belum ada menu</p>
-          <p className="text-sm text-[#6B675F] mb-4">
-            Tambahkan menu terlebih dulu di halaman Setting agar bisa mulai
-            mencatat penjualan.
-          </p>
-          <button
-            onClick={onGoSetting}
-            className="bg-[#0B4142] text-white text-sm px-4 py-2.5 rounded-xl font-medium"
-          >
-            Buka Setting
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-xs text-[#6B675F] px-1">
-        Masukkan jumlah terjual untuk tiap menu hari ini.
-      </p>
-
-      <div className="flex flex-col gap-2">
-        {itemRows.map((r) => (
-          <div
-            key={r.id}
-            className="bg-white rounded-2xl border border-[#E4DFD3] p-3.5 flex items-center gap-3"
-          >
-            <div className="flex-1 min-w-0">
-              <p className="text-[#262624] font-medium text-sm truncate flex items-center gap-1.5">
-                {r.nama}
-                {r.bonus && (
-                  <span className="text-[9px] uppercase tracking-wide bg-[#F1E4D8] text-[#A6472A] px-1.5 py-0.5 rounded-full font-semibold">
-                    bonus
-                  </span>
-                )}
-              </p>
-              <p className="text-xs text-[#6B675F] tabular-nums">{rupiah(r.harga)}</p>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setQty(r.id, r.jumlah - 1)}
-                className="w-7 h-7 rounded-full bg-[#F6F2EA] flex items-center justify-center text-[#0B4142]"
-              >
-                <Minus size={14} />
-              </button>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                value={r.jumlah === 0 ? "" : r.jumlah}
-                placeholder="0"
-                onChange={(e) => setQty(r.id, e.target.value)}
-                className="w-11 text-center text-sm font-semibold text-[#262624] bg-transparent outline-none tabular-nums"
-              />
-              <button
-                onClick={() => setQty(r.id, r.jumlah + 1)}
-                className="w-7 h-7 rounded-full bg-[#0B4142] flex items-center justify-center text-white"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
-
-            <div className="w-20 text-right shrink-0">
-              <p className="text-sm font-semibold text-[#262624] tabular-nums">
-                {r.subtotal > 0 ? rupiah(r.subtotal) : "—"}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Summary */}
-      <div className="bg-white rounded-2xl border border-[#E4DFD3] p-4 mt-1 flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <span className="text-sm text-[#6B675F]">Total Omzet</span>
-          <span className="text-xl font-bold text-[#262624] tabular-nums">
-            {rupiah(omzet)}
-          </span>
-        </div>
-
-        <button
-          onClick={() => setShowRincian((v) => !v)}
-          className="flex items-center justify-between text-sm text-[#0B4142] font-medium border-t border-[#E4DFD3] pt-3"
-        >
-          Rincian Gaji Pegawai
-          {showRincian ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-
-        {showRincian && (
-          <div className="flex flex-col gap-2.5 text-sm text-[#6B675F]">
-            <p className="text-xs text-[#6B675F] -mb-1">
-              Pilih pegawai yang bekerja hari ini — gaji pokok + bagian bonus
-              langsung terlihat di tiap nama.
-            </p>
-
-            <div className="flex flex-col gap-1">
-              {pegawaiList.map((p) => {
-                const hasName = !!p.nama;
-                const checked = hasName && isPegawaiSelected(p.key, true);
-                const rowTotal = checked ? p.rate + bonusPerPegawai : 0;
-                return (
-                  <label
-                    key={p.key}
-                    className={`flex items-center gap-2 py-1.5 ${
-                      hasName ? "" : "opacity-40"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      disabled={!hasName}
-                      checked={checked}
-                      onChange={() => togglePegawai(p.key, hasName)}
-                      className="accent-[#0B4142]"
-                    />
-                    <span className="flex-1 text-[#262624] min-w-0 truncate">
-                      {hasName
-                        ? p.nama
-                        : p.type === "inti"
-                        ? "Pegawai inti (belum diisi)"
-                        : "Helper (belum diisi)"}
-                      <span className="text-[10px] text-[#6B675F] ml-1">
-                        · {p.type === "inti" ? "inti" : "helper"}
-                      </span>
-                    </span>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs font-semibold text-[#262624] tabular-nums">
-                        {checked ? rupiah(rowTotal) : "—"}
-                      </p>
-                      {checked && (
-                        <p className="text-[10px] text-[#6B675F] tabular-nums">
-                          {rupiah(p.rate)}
-                          {bonusPerPegawai > 0
-                            ? ` + bonus ${rupiah(bonusPerPegawai)}`
-                            : ""}
-                        </p>
-                      )}
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-
-            <div className="flex justify-between pt-1 border-t border-dashed border-[#E4DFD3]">
-              <span>
-                Bonus penjualan ({bonusItemCount} item × {rupiah(settings.bonusPerItem)})
-              </span>
-              <span className="tabular-nums">{rupiah(bonusTotal)}</span>
-            </div>
-            <div className="flex justify-between font-semibold text-[#262624] pt-1.5 border-t border-dashed border-[#E4DFD3]">
-              <span>Total Gaji</span>
-              <span className="tabular-nums">{rupiah(totalGaji)}</span>
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-baseline justify-between border-t border-[#E4DFD3] pt-3">
-          <span className="text-sm text-[#6B675F]">Total Laba</span>
-          <span
-            className={`text-xl font-bold tabular-nums ${
-              totalLaba >= 0 ? "text-[#2F6F4E]" : "text-[#B3261E]"
-            }`}
-          >
-            {rupiah(totalLaba)}
-          </span>
-        </div>
-      </div>
-
-      <button
-        onClick={onSimpan}
-        className="w-full bg-[#0B4142] text-white font-medium py-3.5 rounded-2xl mt-1 active:opacity-90"
-      >
-        Simpan Transaksi Hari Ini
-      </button>
-    </div>
-  );
-}
-
-// ---------- Riwayat Tab ----------
-function RiwayatTab({
-  history,
-  expandedId,
-  setExpandedId,
-  rekapDate,
-  setRekapDate,
-  rekapMonth,
-  setRekapMonth,
-  onUnduhHarian,
-  onUnduhBulanan,
-  confirmClear,
-  setConfirmClear,
-  onClearHistory,
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="bg-white rounded-2xl border border-[#E4DFD3] p-4 flex flex-col gap-3">
-        <p className="text-sm font-medium text-[#262624]">Unduh Rekap</p>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={rekapDate}
-            onChange={(e) => setRekapDate(e.target.value)}
-            className="flex-1 text-sm border border-[#E4DFD3] rounded-xl px-3 py-2 bg-[#F6F2EA] text-[#262624]"
-          />
-          <button
-            onClick={onUnduhHarian}
-            className="flex items-center gap-1.5 bg-[#0B4142] text-white text-xs font-medium px-3 py-2.5 rounded-xl shrink-0"
-          >
-            <Download size={14} /> Harian
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="month"
-            value={rekapMonth}
-            onChange={(e) => setRekapMonth(e.target.value)}
-            className="flex-1 text-sm border border-[#E4DFD3] rounded-xl px-3 py-2 bg-[#F6F2EA] text-[#262624]"
-          />
-          <button
-            onClick={onUnduhBulanan}
-            className="flex items-center gap-1.5 bg-[#0B4142] text-white text-xs font-medium px-3 py-2.5 rounded-xl shrink-0"
-          >
-            <Download size={14} /> Bulanan
-          </button>
-        </div>
-      </div>
-
-      <div>
-        <p className="text-sm font-medium text-[#262624] px-1 mb-2">
-          Daftar Transaksi ({history.length})
-        </p>
-
-        {history.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-[#E4DFD3] p-6 text-center text-sm text-[#6B675F]">
-            Belum ada transaksi tersimpan.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {history.map((r) => {
-              const open = expandedId === r.id;
-              return (
-                <div
-                  key={r.id}
-                  className="bg-white rounded-2xl border border-[#E4DFD3] overflow-hidden"
-                >
-                  <button
-                    onClick={() => setExpandedId(open ? null : r.id)}
-                    className="w-full flex items-center justify-between p-3.5 text-left"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-[#262624]">
-                        {dateLabelLong(r.dateISO)}
-                      </p>
-                      <p className="text-xs text-[#6B675F]">
-                        {timeLabel(r.dateISO)} · Omzet {rupiah(r.omzet)} · Laba{" "}
-                        <span
-                          className={
-                            r.laba >= 0 ? "text-[#2F6F4E]" : "text-[#B3261E]"
-                          }
-                        >
-                          {rupiah(r.laba)}
-                        </span>
-                      </p>
-                    </div>
-                    {open ? (
-                      <ChevronUp size={16} className="text-[#6B675F] shrink-0" />
-                    ) : (
-                      <ChevronDown size={16} className="text-[#6B675F] shrink-0" />
-                    )}
-                  </button>
-
-                  {open && (
-                    <div className="px-3.5 pb-3.5 flex flex-col gap-2 border-t border-[#E4DFD3] pt-3">
-                      {r.items.map((it, i) => (
-                        <div key={i} className="flex justify-between text-sm">
-                          <span className="text-[#262624]">
-                            {it.nama} × {it.jumlah}
-                          </span>
-                          <span className="text-[#6B675F] tabular-nums">
-                            {rupiah(it.subtotal)}
-                          </span>
-                        </div>
-                      ))}
-                      <div className="border-t border-dashed border-[#E4DFD3] pt-2 flex flex-col gap-1 text-xs text-[#6B675F]">
-                        {(r.pegawaiIntiHadir?.length > 0 ||
-                          r.pegawaiHelperHadir?.length > 0) && (
-                          <div className="flex justify-between gap-3">
-                            <span>Pegawai hadir</span>
-                            <span className="text-right text-[#262624]">
-                              {[...(r.pegawaiIntiHadir || []), ...(r.pegawaiHelperHadir || [])].join(
-                                ", "
-                              ) || "-"}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between">
-                          <span>Gaji Inti + Helper</span>
-                          <span className="tabular-nums">
-                            {rupiah(r.gajiInti + r.gajiHelper)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Bonus ({r.bonusItemCount} item)</span>
-                          <span className="tabular-nums">{rupiah(r.bonus)}</span>
-                        </div>
-                        <div className="flex justify-between font-medium text-[#262624]">
-                          <span>Total Gaji</span>
-                          <span className="tabular-nums">{rupiah(r.totalGaji)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {history.length > 0 && (
-        <div className="pt-1">
-          {!confirmClear ? (
-            <button
-              onClick={() => setConfirmClear(true)}
-              className="text-xs text-[#B3261E] underline"
-            >
-              Hapus semua riwayat
-            </button>
-          ) : (
-            <div className="bg-[#FBEAE9] border border-[#EFC6C2] rounded-xl p-3 flex flex-col gap-2">
-              <p className="text-xs text-[#7A241E]">
-                Yakin hapus semua riwayat transaksi? Tindakan ini tidak bisa
-                dibatalkan.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={onClearHistory}
-                  className="flex-1 bg-[#B3261E] text-white text-xs font-medium py-2 rounded-lg"
-                >
-                  Ya, hapus
-                </button>
-                <button
-                  onClick={() => setConfirmClear(false)}
-                  className="flex-1 bg-white border border-[#E4DFD3] text-[#262624] text-xs font-medium py-2 rounded-lg"
-                >
-                  Batal
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------- Setting Tab ----------
-function SettingTab({
-  settings,
-  setSettings,
-  newProduct,
-  setNewProduct,
-  addProduct,
-  updateProduct,
-  removeProduct,
-  updatePegawaiInti,
-  updateHelper,
-  saveStatus,
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-end px-1 h-4">
-        {saveStatus === "saving" && (
-          <span className="text-[11px] text-[#6B675F] flex items-center gap-1">
-            <Loader2 size={11} className="animate-spin" /> Menyimpan...
-          </span>
-        )}
-        {saveStatus === "saved" && (
-          <span className="text-[11px] text-[#2F6F4E] flex items-center gap-1">
-            <CheckCircle2 size={11} /> Tersimpan
-          </span>
-        )}
-      </div>
-
-      {/* Products */}
-      <div className="bg-white rounded-2xl border border-[#E4DFD3] p-4 flex flex-col gap-3">
-        <p className="text-sm font-medium text-[#262624]">Kelola Menu Produk</p>
-
-        {settings.products.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {settings.products.map((p) => (
-              <div
-                key={p.id}
-                className="border border-[#E4DFD3] rounded-xl p-2.5 flex items-center gap-2"
-              >
-                <input
-                  value={p.nama}
-                  onChange={(e) => updateProduct(p.id, { nama: e.target.value })}
-                  className="flex-1 min-w-0 text-sm bg-[#F6F2EA] rounded-lg px-2.5 py-2 outline-none text-[#262624]"
-                  placeholder="Nama menu"
-                />
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  value={p.harga}
-                  onChange={(e) =>
-                    updateProduct(p.id, { harga: Number(e.target.value) || 0 })
-                  }
-                  className="w-20 text-sm bg-[#F6F2EA] rounded-lg px-2 py-2 outline-none text-[#262624] tabular-nums"
-                  placeholder="Harga"
-                />
-                <button
-                  onClick={() => updateProduct(p.id, { bonus: !p.bonus })}
-                  title="Tandai sebagai bonus"
-                  className={`text-[10px] px-2 py-2 rounded-lg font-semibold shrink-0 ${
-                    p.bonus
-                      ? "bg-[#A6472A] text-white"
-                      : "bg-[#F1EEE6] text-[#6B675F]"
-                  }`}
-                >
-                  Bonus
-                </button>
-                <button
-                  onClick={() => removeProduct(p.id)}
-                  className="text-[#B3261E] shrink-0 p-1"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="border-t border-dashed border-[#E4DFD3] pt-3 flex flex-col gap-2">
-          <p className="text-xs text-[#6B675F]">Tambah menu baru</p>
-          <div className="flex items-center gap-2">
-            <input
-              value={newProduct.nama}
-              onChange={(e) =>
-                setNewProduct((n) => ({ ...n, nama: e.target.value }))
-              }
-              placeholder="Nama menu"
-              className="flex-1 min-w-0 text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624]"
-            />
-            <input
-              type="number"
-              inputMode="numeric"
-              value={newProduct.harga}
-              onChange={(e) =>
-                setNewProduct((n) => ({ ...n, harga: e.target.value }))
-              }
-              placeholder="Harga"
-              className="w-20 text-sm border border-[#E4DFD3] rounded-lg px-2 py-2 outline-none text-[#262624]"
-            />
-          </div>
-          <label className="flex items-center gap-2 text-xs text-[#6B675F]">
-            <input
-              type="checkbox"
-              checked={newProduct.bonus}
-              onChange={(e) =>
-                setNewProduct((n) => ({ ...n, bonus: e.target.checked }))
-              }
-              className="accent-[#0B4142]"
-            />
-            Tandai sebagai menu bonus (dapat bonus Rp per item terjual)
+  for(const d of defaults){ state.employees.push(await db.insert('employees', d)); }
+  renderPegawaiList(); renderPegawaiDropdown();
+  toast('Pegawai default ditambahkan');
+});
+document.getElementById('btnAddPegawai').addEventListener('click', async ()=>{
+  const name = document.getElementById('newEmpName').value.trim();
+  const role = document.getElementById('newEmpRole').value;
+  const base_salary = Number(document.getElementById('newEmpSalary').value) || 0;
+  if(!name){ toast('Nama pegawai wajib diisi'); return; }
+  const saved = await db.insert('employees', { name, role, base_salary });
+  state.employees.unshift(saved);
+  document.getElementById('newEmpName').value='';
+  renderPegawaiList(); renderPegawaiDropdown();
+  toast('Pegawai ditambahkan');
+});
+function renderPegawaiList(){
+  const wrap = document.getElementById('listPegawai');
+  wrap.innerHTML = state.employees.map(emp=>{
+    if(state.editingEmployeeId === emp.id){
+      return `<div class="manage-row edit-row" data-id="${emp.id}">
+        <div class="manage-info-edit">
+          <label>Nama <input type="text" class="edit-name" value="${escapeHtml(emp.name)}"></label>
+          <label>Peran
+            <select class="edit-role">
+              <option value="inti" ${emp.role==='inti'?'selected':''}>Pegawai inti</option>
+              <option value="helper" ${emp.role==='helper'?'selected':''}>Helper</option>
+            </select>
           </label>
-          <button
-            onClick={addProduct}
-            className="flex items-center justify-center gap-1.5 bg-[#0B4142] text-white text-sm font-medium py-2.5 rounded-xl"
-          >
-            <Plus size={15} /> Tambah Menu
-          </button>
+          <label>Gaji pokok <input type="number" class="edit-salary" value="${emp.base_salary}"></label>
         </div>
+        <div class="row-actions">
+          <button class="btn btn-primary btn-sm" data-action="save" data-id="${emp.id}">Simpan</button>
+          <button class="btn btn-outline btn-sm" data-action="cancel" data-id="${emp.id}">Batal</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="manage-row" data-id="${emp.id}">
+      <div class="manage-info">
+        <strong>${escapeHtml(emp.name)}</strong>
+        <span>${emp.role==='inti'?'Pegawai inti':'Helper'} • ${rupiah(emp.base_salary)}</span>
       </div>
-
-      {/* Employees */}
-      <div className="bg-white rounded-2xl border border-[#E4DFD3] p-4 flex flex-col gap-3">
-        <p className="text-sm font-medium text-[#262624]">Kelola Pegawai & Gaji</p>
-
-        <div>
-          <p className="text-xs text-[#6B675F] mb-1.5">Pegawai Inti (3 orang)</p>
-          <div className="flex flex-col gap-1.5">
-            {settings.pegawaiInti.map((nm, i) => (
-              <input
-                key={i}
-                value={nm}
-                onChange={(e) => updatePegawaiInti(i, e.target.value)}
-                placeholder={`Nama pegawai inti ${i + 1}`}
-                className="text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624]"
-              />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs text-[#6B675F] mb-1.5">Helper (4 orang)</p>
-          <div className="flex flex-col gap-1.5">
-            {settings.helper.map((nm, i) => (
-              <input
-                key={i}
-                value={nm}
-                onChange={(e) => updateHelper(i, e.target.value)}
-                placeholder={`Nama helper ${i + 1}`}
-                className="text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624]"
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <p className="text-xs text-[#6B675F] mb-1">Gaji pegawai inti / hari</p>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={settings.rateInti}
-              onChange={(e) =>
-                setSettings((s) => ({ ...s, rateInti: Number(e.target.value) || 0 }))
-              }
-              className="w-full text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624] tabular-nums"
-            />
-          </div>
-          <div>
-            <p className="text-xs text-[#6B675F] mb-1">Gaji helper / hari</p>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={settings.rateHelper}
-              onChange={(e) =>
-                setSettings((s) => ({
-                  ...s,
-                  rateHelper: Number(e.target.value) || 0,
-                }))
-              }
-              className="w-full text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624] tabular-nums"
-            />
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs text-[#6B675F] mb-1">
-            Bonus per item menu bonus terjual
-          </p>
-          <input
-            type="number"
-            inputMode="numeric"
-            value={settings.bonusPerItem}
-            onChange={(e) =>
-              setSettings((s) => ({
-                ...s,
-                bonusPerItem: Number(e.target.value) || 0,
-              }))
-            }
-            className="w-full text-sm border border-[#E4DFD3] rounded-lg px-2.5 py-2 outline-none text-[#262624] tabular-nums"
-          />
-        </div>
+      <div class="row-actions">
+        <button class="btn btn-outline btn-sm" data-action="edit" data-id="${emp.id}">Ubah</button>
+        <button class="btn btn-danger btn-sm" data-action="delete" data-id="${emp.id}">Hapus</button>
       </div>
-    </div>
-  );
+    </div>`;
+  }).join('') || '<p class="empty-note">Belum ada pegawai.</p>';
 }
+document.getElementById('listPegawai').addEventListener('click', async e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  const id = btn.dataset.id, action = btn.dataset.action;
+  if(action==='edit'){ state.editingEmployeeId=id; renderPegawaiList(); }
+  else if(action==='cancel'){ state.editingEmployeeId=null; renderPegawaiList(); }
+  else if(action==='delete'){
+    if(confirm('Hapus pegawai ini?')){
+      await db.remove('employees', id);
+      state.employees = state.employees.filter(e=>e.id!==id);
+      renderPegawaiList(); renderPegawaiDropdown(); recomputeInputPreview();
+      toast('Pegawai dihapus');
+    }
+  } else if(action==='save'){
+    const row = e.target.closest('.edit-row');
+    const name = row.querySelector('.edit-name').value.trim();
+    const role = row.querySelector('.edit-role').value;
+    const base_salary = Number(row.querySelector('.edit-salary').value) || 0;
+    if(!name){ toast('Nama pegawai wajib diisi'); return; }
+    const updated = await db.update('employees', id, { name, role, base_salary });
+    const idx = state.employees.findIndex(x=>x.id===id);
+    state.employees[idx] = updated;
+    state.editingEmployeeId = null;
+    renderPegawaiList(); renderPegawaiDropdown(); recomputeInputPreview();
+    toast('Pegawai diperbarui');
+  }
+});
+
+/* ---------- Setting: Kelola riwayat (satu-satunya tempat edit/hapus riwayat) ---------- */
+function renderKelolaRiwayat(){
+  const wrap = document.getElementById('listKelolaRiwayat');
+  const rows = state.sales.slice(0,200);
+  wrap.innerHTML = rows.map(s=>{
+    if(state.editingSaleId === s.id){
+      const itemFields = (s.items||[]).map((it,idx)=>
+        `<label>${escapeHtml(it.name)} (${rupiah(it.price)}${it.is_bonus?' • bonus':''}) <input type="number" class="edit-item-qty" data-idx="${idx}" min="0" value="${it.qty}"></label>`
+      ).join('');
+      return `<div class="manage-row edit-row" data-id="${s.id}">
+        <div class="manage-info-edit">
+          <span>${s.sale_date}</span>
+          ${itemFields}
+          <label>Pegawai
+            <select class="edit-emp">
+              ${state.employees.map(e=>`<option value="${e.id}" ${e.id===s.employee_id?'selected':''}>${escapeHtml(e.name)} (${e.role})</option>`).join('')}
+            </select>
+          </label>
+          <label>Omzet <input type="number" class="edit-omzet" value="${s.omzet}"></label>
+          <label>Laba (sebelum potongan) <input type="number" class="edit-laba" value="${s.laba_kotor}"></label>
+        </div>
+        <div class="row-actions">
+          <button class="btn btn-primary btn-sm" data-action="save" data-id="${s.id}">Simpan</button>
+          <button class="btn btn-outline btn-sm" data-action="cancel" data-id="${s.id}">Batal</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="manage-row" data-id="${s.id}">
+      <div class="manage-info">
+        <strong>${escapeHtml(itemsSummary(s.items))}</strong>
+        <span>${s.sale_date} • ${escapeHtml(s.employee_name||'-')} • Omzet ${rupiah(s.omzet)} • Laba bersih ${rupiah(s.laba_bersih)}</span>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-outline btn-sm" data-action="edit" data-id="${s.id}">Ubah</button>
+        <button class="btn btn-danger btn-sm" data-action="delete" data-id="${s.id}">Hapus</button>
+      </div>
+    </div>`;
+  }).join('') || '<p class="empty-note">Belum ada transaksi.</p>';
+}
+document.getElementById('listKelolaRiwayat').addEventListener('click', async e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  const id = btn.dataset.id, action = btn.dataset.action;
+  if(action==='edit'){ state.editingSaleId=id; renderKelolaRiwayat(); }
+  else if(action==='cancel'){ state.editingSaleId=null; renderKelolaRiwayat(); }
+  else if(action==='delete'){
+    if(confirm('Hapus data transaksi ini?')){
+      await db.remove('sales', id);
+      state.sales = state.sales.filter(s=>s.id!==id);
+      renderKelolaRiwayat(); renderRiwayat(); renderSummary(); renderTotalLabaHariIni();
+      toast('Transaksi dihapus');
+    }
+  } else if(action==='save'){
+    const row = e.target.closest('.edit-row');
+    const sale = state.sales.find(s=>s.id===id);
+    const updatedItems = (sale.items||[]).map((it,idx)=>{
+      const qtyInput = row.querySelector(`.edit-item-qty[data-idx="${idx}"]`);
+      const qty = qtyInput ? (parseInt(qtyInput.value)||0) : it.qty;
+      return { ...it, qty, subtotal: it.price*qty };
+    });
+    const empId = row.querySelector('.edit-emp').value;
+    const emp = state.employees.find(x=>x.id===empId) || {};
+    const omzet = Number(row.querySelector('.edit-omzet').value) || 0;
+    const labaKotor = Number(row.querySelector('.edit-laba').value) || 0;
+
+    const totalHarga = updatedItems.reduce((sum,it)=>sum+it.subtotal,0);
+    const bonusQty = updatedItems.filter(it=>it.is_bonus).reduce((sum,it)=>sum+it.qty,0);
+    const bonus = bonusQty * BONUS_PER_ITEM;
+    const potongan = labaKotor * POTONGAN_ALAT_PERSEN;
+    const labaBersih = labaKotor - potongan;
+
+    const patch = {
+      items: updatedItems,
+      total_harga: totalHarga,
+      employee_id: emp.id, employee_name: emp.name, employee_role: emp.role,
+      base_salary: emp.base_salary, bonus, total_gaji: Number(emp.base_salary||0)+bonus,
+      omzet, laba_kotor: labaKotor, potongan_alat: potongan, laba_bersih: labaBersih
+    };
+    const updated = await db.update('sales', id, patch);
+    const idx = state.sales.findIndex(s=>s.id===id);
+    state.sales[idx] = updated;
+    state.editingSaleId = null;
+    renderKelolaRiwayat(); renderRiwayat(); renderSummary(); renderTotalLabaHariIni();
+    toast('Transaksi diperbarui');
+  }
+});
+
+init();
+</script>
+</body>
+</html>
