@@ -126,12 +126,10 @@
   .static-row .label{ color:var(--muted); font-weight:600; }
   .static-row .value{ font-weight:700; font-variant-numeric:tabular-nums; }
   .static-row.strong .value{ font-size:1.05rem; }
+  .static-row.laba-bersih{ padding-top:12px; }
+  .static-row.laba-bersih .label{ color:var(--profit); font-weight:800; }
+  .static-row.laba-bersih .value{ color:var(--profit); font-weight:800; font-size:1.3rem; }
   .divider{ border:none; border-top:1px solid var(--line); margin:12px 0; }
-  .big-total{ text-align:center; padding:14px 0 6px; }
-  .big-total .label{ font-size:.78rem; color:var(--muted); font-weight:600; }
-  .big-total .value{
-    font-size:1.9rem; font-weight:800; color:var(--profit); font-variant-numeric:tabular-nums;
-  }
   .btn{
     display:block; width:100%; padding:12px 16px; border-radius:8px; border:none;
     font-family:inherit; font-weight:700; font-size:.92rem; cursor:pointer; text-align:center;
@@ -151,7 +149,7 @@
   .table-wrap{ overflow-x:auto; margin-bottom:10px; }
   table{ width:100%; border-collapse:collapse; font-size:.78rem; min-width:600px; }
   th, td{ padding:8px 6px; border-bottom:1px solid var(--line); text-align:left; }
-  td.produk-col{ white-space:normal; min-width:160px; }
+  td.produk-col{ white-space:normal; min-width:150px; }
   th{ color:var(--muted); font-weight:700; font-size:.72rem; white-space:nowrap; }
   td.profit{ color:var(--profit); font-weight:700; white-space:nowrap; }
   tfoot td{ font-weight:800; border-top:2px solid var(--ink); border-bottom:none; white-space:nowrap; }
@@ -167,6 +165,12 @@
     width:66px; padding:8px; border:1px solid var(--line); border-radius:6px;
     text-align:center; font-family:inherit; font-size:.9rem; flex-shrink:0;
   }
+  .emp-check-row{
+    display:flex; align-items:center; gap:9px; padding:8px 0; border-bottom:1px solid var(--line); font-size:.88rem;
+  }
+  .emp-check-row:last-child{ border-bottom:none; }
+  .emp-check-row input{ width:auto; }
+  .emp-gaji-row .label{ font-weight:600; }
   .manage-row{
     display:flex; justify-content:space-between; align-items:center; gap:10px;
     padding:10px 0; border-bottom:1px solid var(--line);
@@ -183,13 +187,6 @@
   .row-actions{ display:flex; gap:6px; flex-shrink:0; }
   .chk{ display:flex; align-items:center; gap:6px; font-size:.82rem; font-weight:600; }
   .chk input{ width:auto; }
-  #adminGate{
-    position:fixed; inset:0; background:rgba(30,27,22,.6);
-    display:flex; align-items:center; justify-content:center; z-index:20; padding:20px;
-  }
-  .gate-card{ background:var(--card); border-radius:14px; padding:26px 22px; width:min(320px,100%); text-align:center; }
-  .gate-card h2{ margin:0 0 6px; font-size:1.05rem; }
-  .gate-card p{ margin:0 0 16px; font-size:.8rem; color:var(--muted); }
   #toast{
     position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px);
     background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:8px;
@@ -206,7 +203,7 @@
   </header>
 
   <div id="demoBanner" class="demo-banner hidden">
-     &amp;
+    Mode demo lokal — data belum tersambung ke Supabase, jadi tidak tersimpan permanen. Isi SUPABASE_URL &amp; SUPABASE_ANON_KEY di dalam kode untuk menyambungkan database.
   </div>
 
   <nav class="tabs">
@@ -228,10 +225,16 @@
 
   <main>
 
-    <!-- ===================== TAB: INPUT (tanpa login) ===================== -->
+    <!-- ===================== TAB: INPUT ===================== -->
     <section id="section-input" class="tab-section">
       <div class="card">
         <h2>Catatan penjualan</h2>
+
+        <div class="field">
+          <label for="inpTanggal">Tanggal</label>
+          <input type="date" id="inpTanggal">
+        </div>
+
         <p style="font-size:.78rem;color:var(--muted);margin:-6px 0 12px;">Isi jumlah untuk setiap produk yang terjual.</p>
         <div id="productCartList"></div>
 
@@ -243,23 +246,10 @@
         <hr class="divider">
 
         <div class="field">
-          <label for="selPegawai">Pegawai</label>
-          <select id="selPegawai"><option value="">Pilih pegawai…</option></select>
+          <label>Pegawai (bisa pilih lebih dari satu)</label>
+          <div id="employeeCheckList"></div>
         </div>
-        <div id="empGajiInfo" class="hidden">
-          <div class="static-row">
-            <span class="label">Gaji pokok</span>
-            <span class="value" id="dispGajiPokok">Rp 0</span>
-          </div>
-          <div class="static-row">
-            <span class="label">Bonus penjualan</span>
-            <span class="value" id="dispBonus">Rp 0</span>
-          </div>
-          <div class="static-row strong">
-            <span class="label">Total gaji</span>
-            <span class="value" id="dispTotalGaji">Rp 0</span>
-          </div>
-        </div>
+        <div id="empGajiInfo" class="hidden"></div>
 
         <hr class="divider">
 
@@ -275,14 +265,9 @@
           <span class="label">Potongan penggunaan alat (15%)</span>
           <span class="value" id="dispPotongan">Rp 0</span>
         </div>
-        <div class="static-row strong">
+        <div class="static-row laba-bersih">
           <span class="label">Laba bersih</span>
           <span class="value" id="dispLabaBersih">Rp 0</span>
-        </div>
-
-        <div class="big-total">
-          <div class="label">Total laba bersih hari ini</div>
-          <div class="value" id="dispTotalLabaHariIni">Rp 0</div>
         </div>
 
         <button class="btn btn-primary" id="btnSimpanPenjualan">Simpan penjualan</button>
@@ -335,69 +320,56 @@
       </div>
     </section>
 
-    <!-- ===================== TAB: SETTING (khusus admin) ===================== -->
+    <!-- ===================== TAB: SETTING ===================== -->
     <section id="section-setting" class="tab-section hidden">
-      <div id="settingContent" class="hidden">
 
-        <div class="card">
-          <h2>Produk</h2>
-          <div class="field">
-            <label>Nama produk</label>
-            <input type="text" id="newProdName" placeholder="mis. Nasi Goreng">
-          </div>
-          <div class="field">
-            <label>Harga</label>
-            <input type="number" id="newProdPrice" placeholder="0">
-          </div>
-          <label class="chk"><input type="checkbox" id="newProdBonus"> Tandai sebagai barang bonus</label>
-          <button class="btn btn-primary" id="btnAddProduk">Tambah produk</button>
-          <div id="listProduk" style="margin-top:14px;"></div>
+      <div class="card">
+        <h2>Produk</h2>
+        <div class="field">
+          <label>Nama produk</label>
+          <input type="text" id="newProdName" placeholder="mis. Nasi Goreng">
         </div>
-
-        <div class="card">
-          <h2>Pegawai</h2>
-          <button class="btn btn-outline" id="btnSeedPegawai">Isi pegawai default (3 inti + 4 helper)</button>
-          <div style="height:14px;"></div>
-          <div class="field">
-            <label>Nama pegawai</label>
-            <input type="text" id="newEmpName" placeholder="mis. Pegawai Inti 1">
-          </div>
-          <div class="field">
-            <label>Peran</label>
-            <select id="newEmpRole">
-              <option value="inti">Pegawai inti (Rp 15.000)</option>
-              <option value="helper">Helper (Rp 10.000)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Gaji pokok</label>
-            <input type="number" id="newEmpSalary" value="15000">
-          </div>
-          <button class="btn btn-primary" id="btnAddPegawai">Tambah pegawai</button>
-          <div id="listPegawai" style="margin-top:14px;"></div>
+        <div class="field">
+          <label>Harga</label>
+          <input type="number" id="newProdPrice" placeholder="0">
         </div>
-
-        <div class="card">
-          <h2>Kelola riwayat</h2>
-          <p style="font-size:.8rem;color:var(--muted);margin-top:-6px;">Ubah atau hapus data penjualan yang sudah tersimpan. Ini satu-satunya tempat riwayat bisa diedit atau dihapus.</p>
-          <div id="listKelolaRiwayat"></div>
-        </div>
-
+        <label class="chk"><input type="checkbox" id="newProdBonus"> Tandai sebagai barang bonus</label>
+        <button class="btn btn-primary" id="btnAddProduk">Tambah produk</button>
+        <div id="listProduk" style="margin-top:14px;"></div>
       </div>
+
+      <div class="card">
+        <h2>Pegawai</h2>
+        <button class="btn btn-outline" id="btnSeedPegawai">Isi pegawai default (3 inti + 4 helper)</button>
+        <div style="height:14px;"></div>
+        <div class="field">
+          <label>Nama pegawai</label>
+          <input type="text" id="newEmpName" placeholder="mis. Pegawai Inti 1">
+        </div>
+        <div class="field">
+          <label>Peran</label>
+          <select id="newEmpRole">
+            <option value="inti">Pegawai inti (Rp 15.000)</option>
+            <option value="helper">Helper (Rp 10.000)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Gaji pokok</label>
+          <input type="number" id="newEmpSalary" value="15000">
+        </div>
+        <button class="btn btn-primary" id="btnAddPegawai">Tambah pegawai</button>
+        <div id="listPegawai" style="margin-top:14px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>Kelola riwayat</h2>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:-6px;">Ubah atau hapus data penjualan yang sudah tersimpan. Ini satu-satunya tempat riwayat bisa diedit atau dihapus.</p>
+        <div id="listKelolaRiwayat"></div>
+      </div>
+
     </section>
 
   </main>
-</div>
-
-<div id="adminGate">
-  <div class="gate-card">
-    <h2>Masuk sebagai admin</h2>
-    <p>Masukkan PIN untuk mengubah pengaturan.</p>
-    <div class="field">
-      <input type="password" id="pinInput" placeholder="PIN admin" inputmode="numeric">
-    </div>
-    <button class="btn btn-primary" id="btnPinSubmit">Masuk</button>
-  </div>
 </div>
 
 <div id="toast"></div>
@@ -409,7 +381,6 @@
    ========================================================= */
 const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
 const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
-const ADMIN_PIN = "1234"; // ganti PIN admin di sini
 const BONUS_PER_ITEM = 500;
 const POTONGAN_ALAT_PERSEN = 0.15; // potongan penggunaan alat 15% dari laba
 
@@ -468,7 +439,6 @@ const state = {
   editingProductId: null,
   editingEmployeeId: null,
   editingSaleId: null,
-  adminUnlocked: false,
   filter: 'month'
 };
 
@@ -489,6 +459,9 @@ function isToday(dateStr){ return dateStr === todayStr(); }
 function isCurrentMonth(dateStr){ return !!dateStr && dateStr.slice(0,7) === currentYearMonth(); }
 function itemsSummary(items){
   return (items||[]).map(it=>`${it.name} ×${it.qty}`).join(', ') || '-';
+}
+function employeeNamesSummary(employees){
+  return (employees||[]).map(e=>e.name).join(', ') || '-';
 }
 let toastTimer = null;
 function toast(msg){
@@ -512,46 +485,27 @@ async function init(){
     state.employees.push(await db.insert('employees', { name:'Helper 1', role:'helper', base_salary:10000 }));
   }
 
+  document.getElementById('inpTanggal').value = todayStr();
   document.getElementById('inpTanggalHarian').value = todayStr();
   document.getElementById('inpBulanBulanan').value = currentYearMonth();
 
   renderProductCart();
-  renderPegawaiDropdown();
+  renderEmployeeCheckList();
   recomputeInputPreview();
   renderSummary();
   renderRiwayat();
-  renderTotalLabaHariIni();
   renderProdukList();
   renderPegawaiList();
   renderKelolaRiwayat();
 }
 
-/* ---------- Tabs (Input & Riwayat tanpa login, Setting pakai PIN) ---------- */
+/* ---------- Tabs (semua menu tanpa login) ---------- */
 document.querySelectorAll('.tab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>switchTab(btn.dataset.tab));
 });
 function switchTab(name){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
   document.querySelectorAll('.tab-section').forEach(s=>s.classList.toggle('hidden', s.id !== 'section-'+name));
-  if(name === 'setting'){
-    state.adminUnlocked = false;
-    document.getElementById('settingContent').classList.add('hidden');
-    document.getElementById('pinInput').value = '';
-    document.getElementById('adminGate').classList.remove('hidden');
-  }
-}
-document.getElementById('btnPinSubmit').addEventListener('click', checkPin);
-document.getElementById('pinInput').addEventListener('keydown', e=>{ if(e.key==='Enter') checkPin(); });
-function checkPin(){
-  const val = document.getElementById('pinInput').value;
-  if(val === ADMIN_PIN){
-    state.adminUnlocked = true;
-    document.getElementById('adminGate').classList.add('hidden');
-    document.getElementById('settingContent').classList.remove('hidden');
-    renderProdukList(); renderPegawaiList(); renderKelolaRiwayat();
-  } else {
-    toast('PIN salah');
-  }
 }
 
 /* ---------- Daftar produk di Input (langsung tampil semua, isi jumlah saja) ---------- */
@@ -571,16 +525,21 @@ document.getElementById('productCartList').addEventListener('input', e=>{
   if(e.target.classList.contains('cart-qty')) recomputeInputPreview();
 });
 
-function renderPegawaiDropdown(){
-  const sel = document.getElementById('selPegawai');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Pilih pegawai…</option>' +
-    state.employees.map(e=>`<option value="${e.id}">${escapeHtml(e.name)} (${e.role==='inti'?'Inti':'Helper'})</option>`).join('');
-  if(state.employees.some(e=>e.id===current)) sel.value = current;
+/* ---------- Daftar pegawai di Input (checkbox, bisa pilih lebih dari satu) ---------- */
+function renderEmployeeCheckList(){
+  const wrap = document.getElementById('employeeCheckList');
+  wrap.innerHTML = state.employees.map(e=>`
+    <label class="emp-check-row">
+      <input type="checkbox" class="emp-check" value="${e.id}">
+      ${escapeHtml(e.name)} (${e.role==='inti'?'Inti':'Helper'} • ${rupiah(e.base_salary)})
+    </label>
+  `).join('') || '<p class="empty-note">Belum ada pegawai. Tambahkan lewat menu Setting.</p>';
 }
+document.getElementById('employeeCheckList').addEventListener('change', e=>{
+  if(e.target.classList.contains('emp-check')) recomputeInputPreview();
+});
 
 /* ---------- Perhitungan real-time di tab Input ---------- */
-const selPegawai = document.getElementById('selPegawai');
 const inpOmzet = document.getElementById('inpOmzet');
 const inpLaba = document.getElementById('inpLaba');
 
@@ -602,30 +561,49 @@ function getCartItems(){
   });
   return items;
 }
+function getSelectedEmployeeIds(){
+  return Array.from(document.querySelectorAll('.emp-check:checked')).map(c=>c.value);
+}
+function buildEmployeePayroll(items, employeeIds){
+  const bonusQty = items.filter(it=>it.is_bonus).reduce((s,it)=>s+it.qty,0);
+  const bonus = bonusQty * BONUS_PER_ITEM;
+  const list = employeeIds.map(id=>{
+    const emp = state.employees.find(e=>e.id===id);
+    if(!emp) return null;
+    const gajiPokok = Number(emp.base_salary);
+    return {
+      employee_id: emp.id, name: emp.name, role: emp.role,
+      base_salary: gajiPokok, bonus, total_gaji: gajiPokok + bonus
+    };
+  }).filter(Boolean);
+  const totalGajiSemua = list.reduce((s,e)=>s+e.total_gaji,0);
+  return { list, totalGajiSemua, bonus };
+}
 
 function recomputeInputPreview(){
   const items = getCartItems();
   const totalHarga = items.reduce((sum,it)=>sum+it.subtotal,0);
-  const bonusQty = items.filter(it=>it.is_bonus).reduce((sum,it)=>sum+it.qty,0);
-
   document.getElementById('dispTotal').textContent = rupiah(totalHarga);
   inpOmzet.value = totalHarga || '';
 
-  const emp = state.employees.find(e=>e.id===selPegawai.value);
+  const employeeIds = getSelectedEmployeeIds();
   const empGajiInfo = document.getElementById('empGajiInfo');
-  if(emp){
-    empGajiInfo.classList.remove('hidden');
-    const gajiPokok = Number(emp.base_salary);
-    const bonus = bonusQty * BONUS_PER_ITEM;
-    document.getElementById('dispGajiPokok').textContent = rupiah(gajiPokok);
-    document.getElementById('dispBonus').textContent = rupiah(bonus);
-    document.getElementById('dispTotalGaji').textContent = rupiah(gajiPokok + bonus);
-  } else {
+  if(employeeIds.length === 0){
     empGajiInfo.classList.add('hidden');
+    empGajiInfo.innerHTML = '';
+  } else {
+    empGajiInfo.classList.remove('hidden');
+    const payroll = buildEmployeePayroll(items, employeeIds);
+    let html = payroll.list.map(e=>`
+      <div class="static-row emp-gaji-row">
+        <span class="label">${escapeHtml(e.name)}</span>
+        <span class="value">${rupiah(e.base_salary)} + ${rupiah(e.bonus)} = ${rupiah(e.total_gaji)}</span>
+      </div>`).join('');
+    html += `<div class="static-row strong"><span class="label">Total gaji semua pegawai</span><span class="value">${rupiah(payroll.totalGajiSemua)}</span></div>`;
+    empGajiInfo.innerHTML = html;
   }
   recomputeLaba();
 }
-selPegawai.addEventListener('change', recomputeInputPreview);
 
 function recomputeLaba(){
   const labaKotor = Number(inpLaba.value) || 0;
@@ -636,39 +614,28 @@ function recomputeLaba(){
 }
 inpLaba.addEventListener('input', recomputeLaba);
 
-function renderTotalLabaHariIni(){
-  const total = state.sales.filter(s=>isToday(s.sale_date)).reduce((sum,s)=>sum+Number(s.laba_bersih||0),0);
-  document.getElementById('dispTotalLabaHariIni').textContent = rupiah(total);
-}
-
 document.getElementById('btnSimpanPenjualan').addEventListener('click', simpanPenjualan);
 async function simpanPenjualan(){
   const items = getCartItems();
-  const emp = state.employees.find(e=>e.id===selPegawai.value);
+  const employeeIds = getSelectedEmployeeIds();
 
   if(items.length === 0){ toast('Isi jumlah minimal satu produk'); return; }
-  if(!emp){ toast('Pilih pegawai terlebih dahulu'); return; }
+  if(employeeIds.length === 0){ toast('Pilih minimal satu pegawai'); return; }
 
   const totalHarga = items.reduce((sum,it)=>sum+it.subtotal,0);
-  const bonusQty = items.filter(it=>it.is_bonus).reduce((sum,it)=>sum+it.qty,0);
-  const gajiPokok = Number(emp.base_salary);
-  const bonus = bonusQty * BONUS_PER_ITEM;
-  const totalGaji = gajiPokok + bonus;
+  const payroll = buildEmployeePayroll(items, employeeIds);
   const omzet = Number(inpOmzet.value) || totalHarga;
   const labaKotor = Number(inpLaba.value) || 0;
   const potongan = labaKotor * POTONGAN_ALAT_PERSEN;
   const labaBersih = labaKotor - potongan;
+  const saleDate = document.getElementById('inpTanggal').value || todayStr();
 
   const row = {
-    sale_date: todayStr(),
+    sale_date: saleDate,
     items,
     total_harga: totalHarga,
-    employee_id: emp.id,
-    employee_name: emp.name,
-    employee_role: emp.role,
-    base_salary: gajiPokok,
-    bonus,
-    total_gaji: totalGaji,
+    employees: payroll.list,
+    total_gaji_semua: payroll.totalGajiSemua,
     omzet,
     laba_kotor: labaKotor,
     potongan_alat: potongan,
@@ -680,12 +647,12 @@ async function simpanPenjualan(){
     state.sales.unshift(saved);
     toast('Penjualan disimpan');
     document.querySelectorAll('.cart-qty').forEach(inp=>inp.value='');
-    selPegawai.value = '';
+    document.querySelectorAll('.emp-check').forEach(c=>c.checked=false);
     inpLaba.value = '';
+    document.getElementById('inpTanggal').value = todayStr();
     recomputeInputPreview();
     renderSummary();
     renderRiwayat();
-    renderTotalLabaHariIni();
     renderKelolaRiwayat();
   }catch(err){
     console.error(err);
@@ -723,8 +690,8 @@ function renderRiwayat(){
       <td>${s.sale_date}</td>
       <td class="produk-col">${escapeHtml(itemsSummary(s.items))}</td>
       <td>${rupiah(s.total_harga)}</td>
-      <td>${escapeHtml(s.employee_name||'-')}</td>
-      <td>${rupiah(s.total_gaji)}</td>
+      <td class="produk-col">${escapeHtml(employeeNamesSummary(s.employees))}</td>
+      <td>${rupiah(s.total_gaji_semua)}</td>
       <td>${rupiah(s.omzet)}</td>
       <td class="profit">${rupiah(s.laba_bersih)}</td>
     </tr>`).join('') || `<tr><td colspan="7" class="empty-note">Belum ada data.</td></tr>`;
@@ -761,7 +728,7 @@ function exportPDF(rows, title, filename){
   const doc = new jsPDF();
   doc.setFontSize(14); doc.text(`Kuliner — ${title}`, 14, 15);
 
-  const body = rows.map(s=>[s.sale_date, itemsSummary(s.items), rupiah(s.total_harga), s.employee_name||'-', rupiah(s.total_gaji), rupiah(s.omzet), rupiah(s.laba_bersih)]);
+  const body = rows.map(s=>[s.sale_date, itemsSummary(s.items), rupiah(s.total_harga), employeeNamesSummary(s.employees), rupiah(s.total_gaji_semua), rupiah(s.omzet), rupiah(s.laba_bersih)]);
   doc.autoTable({
     head: [['Tanggal','Produk','Total harga','Pegawai','Gaji+Bonus','Omzet','Laba bersih']],
     body, startY: 22, styles:{ fontSize:8 }
@@ -779,15 +746,13 @@ function exportExcel(rows, filename){
   if(!rows.length){ toast('Tidak ada data untuk tanggal/bulan tersebut'); return; }
   const ringkasan = rows.map(s=>({
     Tanggal:s.sale_date, Produk:itemsSummary(s.items), 'Total Harga':s.total_harga,
-    Pegawai:s.employee_name, 'Gaji+Bonus':s.total_gaji, Omzet:s.omzet,
+    Pegawai:employeeNamesSummary(s.employees), 'Gaji+Bonus':s.total_gaji_semua, Omzet:s.omzet,
     'Laba Kotor':s.laba_kotor, 'Potongan Alat (15%)':s.potongan_alat, 'Laba Bersih':s.laba_bersih
   }));
   const detail = [];
   rows.forEach(s=>{
     (s.items||[]).forEach(it=>{
-      detail.push({
-        Tanggal:s.sale_date, Produk:it.name, Harga:it.price, Jumlah:it.qty, Subtotal:it.subtotal, Pegawai:s.employee_name
-      });
+      detail.push({ Tanggal:s.sale_date, Produk:it.name, Harga:it.price, Jumlah:it.qty, Subtotal:it.subtotal });
     });
   });
   const wb = XLSX.utils.book_new();
@@ -881,7 +846,7 @@ document.getElementById('btnSeedPegawai').addEventListener('click', async ()=>{
     {name:'Helper 4', role:'helper', base_salary:10000},
   ];
   for(const d of defaults){ state.employees.push(await db.insert('employees', d)); }
-  renderPegawaiList(); renderPegawaiDropdown();
+  renderPegawaiList(); renderEmployeeCheckList(); recomputeInputPreview();
   toast('Pegawai default ditambahkan');
 });
 document.getElementById('btnAddPegawai').addEventListener('click', async ()=>{
@@ -892,7 +857,7 @@ document.getElementById('btnAddPegawai').addEventListener('click', async ()=>{
   const saved = await db.insert('employees', { name, role, base_salary });
   state.employees.unshift(saved);
   document.getElementById('newEmpName').value='';
-  renderPegawaiList(); renderPegawaiDropdown();
+  renderPegawaiList(); renderEmployeeCheckList(); recomputeInputPreview();
   toast('Pegawai ditambahkan');
 });
 function renderPegawaiList(){
@@ -937,7 +902,7 @@ document.getElementById('listPegawai').addEventListener('click', async e=>{
     if(confirm('Hapus pegawai ini?')){
       await db.remove('employees', id);
       state.employees = state.employees.filter(e=>e.id!==id);
-      renderPegawaiList(); renderPegawaiDropdown(); recomputeInputPreview();
+      renderPegawaiList(); renderEmployeeCheckList(); recomputeInputPreview();
       toast('Pegawai dihapus');
     }
   } else if(action==='save'){
@@ -950,7 +915,7 @@ document.getElementById('listPegawai').addEventListener('click', async e=>{
     const idx = state.employees.findIndex(x=>x.id===id);
     state.employees[idx] = updated;
     state.editingEmployeeId = null;
-    renderPegawaiList(); renderPegawaiDropdown(); recomputeInputPreview();
+    renderPegawaiList(); renderEmployeeCheckList(); recomputeInputPreview();
     toast('Pegawai diperbarui');
   }
 });
@@ -964,15 +929,16 @@ function renderKelolaRiwayat(){
       const itemFields = (s.items||[]).map((it,idx)=>
         `<label>${escapeHtml(it.name)} (${rupiah(it.price)}${it.is_bonus?' • bonus':''}) <input type="number" class="edit-item-qty" data-idx="${idx}" min="0" value="${it.qty}"></label>`
       ).join('');
+      const selectedIds = (s.employees||[]).map(e=>e.employee_id);
+      const empChecks = state.employees.map(e=>
+        `<label class="emp-check-row"><input type="checkbox" class="edit-emp-check" value="${e.id}" ${selectedIds.includes(e.id)?'checked':''}> ${escapeHtml(e.name)} (${e.role})</label>`
+      ).join('');
       return `<div class="manage-row edit-row" data-id="${s.id}">
         <div class="manage-info-edit">
-          <span>${s.sale_date}</span>
+          <label>Tanggal <input type="date" class="edit-tanggal" value="${s.sale_date}"></label>
           ${itemFields}
-          <label>Pegawai
-            <select class="edit-emp">
-              ${state.employees.map(e=>`<option value="${e.id}" ${e.id===s.employee_id?'selected':''}>${escapeHtml(e.name)} (${e.role})</option>`).join('')}
-            </select>
-          </label>
+          <label>Pegawai (bisa lebih dari satu)</label>
+          ${empChecks}
           <label>Omzet <input type="number" class="edit-omzet" value="${s.omzet}"></label>
           <label>Laba (sebelum potongan) <input type="number" class="edit-laba" value="${s.laba_kotor}"></label>
         </div>
@@ -985,7 +951,7 @@ function renderKelolaRiwayat(){
     return `<div class="manage-row" data-id="${s.id}">
       <div class="manage-info">
         <strong>${escapeHtml(itemsSummary(s.items))}</strong>
-        <span>${s.sale_date} • ${escapeHtml(s.employee_name||'-')} • Omzet ${rupiah(s.omzet)} • Laba bersih ${rupiah(s.laba_bersih)}</span>
+        <span>${s.sale_date} • ${escapeHtml(employeeNamesSummary(s.employees))} • Omzet ${rupiah(s.omzet)} • Laba bersih ${rupiah(s.laba_bersih)}</span>
       </div>
       <div class="row-actions">
         <button class="btn btn-outline btn-sm" data-action="edit" data-id="${s.id}">Ubah</button>
@@ -1003,7 +969,7 @@ document.getElementById('listKelolaRiwayat').addEventListener('click', async e=>
     if(confirm('Hapus data transaksi ini?')){
       await db.remove('sales', id);
       state.sales = state.sales.filter(s=>s.id!==id);
-      renderKelolaRiwayat(); renderRiwayat(); renderSummary(); renderTotalLabaHariIni();
+      renderKelolaRiwayat(); renderRiwayat(); renderSummary();
       toast('Transaksi dihapus');
     }
   } else if(action==='save'){
@@ -1014,29 +980,29 @@ document.getElementById('listKelolaRiwayat').addEventListener('click', async e=>
       const qty = qtyInput ? (parseInt(qtyInput.value)||0) : it.qty;
       return { ...it, qty, subtotal: it.price*qty };
     });
-    const empId = row.querySelector('.edit-emp').value;
-    const emp = state.employees.find(x=>x.id===empId) || {};
+    const saleDate = row.querySelector('.edit-tanggal').value || sale.sale_date;
+    const selectedEmpIds = Array.from(row.querySelectorAll('.edit-emp-check:checked')).map(c=>c.value);
     const omzet = Number(row.querySelector('.edit-omzet').value) || 0;
     const labaKotor = Number(row.querySelector('.edit-laba').value) || 0;
 
     const totalHarga = updatedItems.reduce((sum,it)=>sum+it.subtotal,0);
-    const bonusQty = updatedItems.filter(it=>it.is_bonus).reduce((sum,it)=>sum+it.qty,0);
-    const bonus = bonusQty * BONUS_PER_ITEM;
+    const payroll = buildEmployeePayroll(updatedItems, selectedEmpIds);
     const potongan = labaKotor * POTONGAN_ALAT_PERSEN;
     const labaBersih = labaKotor - potongan;
 
     const patch = {
+      sale_date: saleDate,
       items: updatedItems,
       total_harga: totalHarga,
-      employee_id: emp.id, employee_name: emp.name, employee_role: emp.role,
-      base_salary: emp.base_salary, bonus, total_gaji: Number(emp.base_salary||0)+bonus,
+      employees: payroll.list,
+      total_gaji_semua: payroll.totalGajiSemua,
       omzet, laba_kotor: labaKotor, potongan_alat: potongan, laba_bersih: labaBersih
     };
     const updated = await db.update('sales', id, patch);
     const idx = state.sales.findIndex(s=>s.id===id);
     state.sales[idx] = updated;
     state.editingSaleId = null;
-    renderKelolaRiwayat(); renderRiwayat(); renderSummary(); renderTotalLabaHariIni();
+    renderKelolaRiwayat(); renderRiwayat(); renderSummary();
     toast('Transaksi diperbarui');
   }
 });
