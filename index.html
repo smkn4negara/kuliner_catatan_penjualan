@@ -170,7 +170,20 @@
   }
   .emp-check-row:last-child{ border-bottom:none; }
   .emp-check-row input{ width:auto; }
-  .emp-gaji-row .label{ font-weight:600; }
+  .emp-payroll-card{
+    border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-top:10px;
+  }
+  .emp-payroll-name{ font-weight:700; font-size:.88rem; margin-bottom:8px; }
+  .emp-payroll-grid{ display:flex; gap:18px; }
+  .emp-payroll-grid .cell{ display:flex; flex-direction:column; }
+  .mini-label{ font-size:.68rem; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.02em; margin-bottom:2px; }
+  .mini-value{ font-size:.92rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .payroll-total-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 2px 2px; margin-top:4px; font-size:.9rem;
+  }
+  .payroll-total-row .label{ color:var(--muted); font-weight:700; }
+  .payroll-total-row .value{ font-weight:800; font-size:1.05rem; }
   .manage-row{
     display:flex; justify-content:space-between; align-items:center; gap:10px;
     padding:10px 0; border-bottom:1px solid var(--line);
@@ -187,6 +200,13 @@
   .row-actions{ display:flex; gap:6px; flex-shrink:0; }
   .chk{ display:flex; align-items:center; gap:6px; font-size:.82rem; font-weight:600; }
   .chk input{ width:auto; }
+  #adminGate{
+    position:fixed; inset:0; background:rgba(30,27,22,.6);
+    display:flex; align-items:center; justify-content:center; z-index:20; padding:20px;
+  }
+  .gate-card{ background:var(--card); border-radius:14px; padding:26px 22px; width:min(320px,100%); text-align:center; }
+  .gate-card h2{ margin:0 0 6px; font-size:1.05rem; }
+  .gate-card p{ margin:0 0 16px; font-size:.8rem; color:var(--muted); }
   #toast{
     position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px);
     background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:8px;
@@ -225,7 +245,7 @@
 
   <main>
 
-    <!-- ===================== TAB: INPUT ===================== -->
+    <!-- ===================== TAB: INPUT (tanpa login) ===================== -->
     <section id="section-input" class="tab-section">
       <div class="card">
         <h2>Catatan penjualan</h2>
@@ -255,11 +275,11 @@
 
         <div class="field">
           <label for="inpOmzet">Omzet</label>
-          <input type="number" id="inpOmzet" placeholder="0">
+          <input type="text" inputmode="numeric" id="inpOmzet" placeholder="0">
         </div>
         <div class="field">
           <label for="inpLaba">Laba (sebelum potongan)</label>
-          <input type="number" id="inpLaba" placeholder="0">
+          <input type="text" inputmode="numeric" id="inpLaba" placeholder="0">
         </div>
         <div class="static-row">
           <span class="label">Potongan penggunaan alat (15%)</span>
@@ -317,59 +337,73 @@
           <button class="btn btn-outline" id="btnPdfBulanan">Unduh PDF</button>
           <button class="btn btn-outline" id="btnExcelBulanan">Unduh Excel</button>
         </div>
+        <p style="font-size:.74rem;color:var(--muted);margin:10px 0 0;">Setiap rekap (PDF &amp; Excel) menyertakan rincian gaji pokok dan bonus per pegawai.</p>
       </div>
     </section>
 
-    <!-- ===================== TAB: SETTING ===================== -->
+    <!-- ===================== TAB: SETTING (khusus admin) ===================== -->
     <section id="section-setting" class="tab-section hidden">
+      <div id="settingContent" class="hidden">
 
-      <div class="card">
-        <h2>Produk</h2>
-        <div class="field">
-          <label>Nama produk</label>
-          <input type="text" id="newProdName" placeholder="mis. Nasi Goreng">
+        <div class="card">
+          <h2>Produk</h2>
+          <div class="field">
+            <label>Nama produk</label>
+            <input type="text" id="newProdName" placeholder="mis. Nasi Goreng">
+          </div>
+          <div class="field">
+            <label>Harga</label>
+            <input type="number" id="newProdPrice" placeholder="0">
+          </div>
+          <label class="chk"><input type="checkbox" id="newProdBonus"> Tandai sebagai barang bonus</label>
+          <button class="btn btn-primary" id="btnAddProduk">Tambah produk</button>
+          <div id="listProduk" style="margin-top:14px;"></div>
         </div>
-        <div class="field">
-          <label>Harga</label>
-          <input type="number" id="newProdPrice" placeholder="0">
+
+        <div class="card">
+          <h2>Pegawai</h2>
+          <button class="btn btn-outline" id="btnSeedPegawai">Isi pegawai default (3 inti + 4 helper)</button>
+          <div style="height:14px;"></div>
+          <div class="field">
+            <label>Nama pegawai</label>
+            <input type="text" id="newEmpName" placeholder="mis. Pegawai Inti 1">
+          </div>
+          <div class="field">
+            <label>Peran</label>
+            <select id="newEmpRole">
+              <option value="inti">Pegawai inti (Rp 15.000)</option>
+              <option value="helper">Helper (Rp 10.000)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Gaji pokok</label>
+            <input type="number" id="newEmpSalary" value="15000">
+          </div>
+          <button class="btn btn-primary" id="btnAddPegawai">Tambah pegawai</button>
+          <div id="listPegawai" style="margin-top:14px;"></div>
         </div>
-        <label class="chk"><input type="checkbox" id="newProdBonus"> Tandai sebagai barang bonus</label>
-        <button class="btn btn-primary" id="btnAddProduk">Tambah produk</button>
-        <div id="listProduk" style="margin-top:14px;"></div>
+
+        <div class="card">
+          <h2>Kelola riwayat</h2>
+          <p style="font-size:.8rem;color:var(--muted);margin-top:-6px;">Ubah atau hapus data penjualan yang sudah tersimpan. Ini satu-satunya tempat riwayat bisa diedit atau dihapus.</p>
+          <div id="listKelolaRiwayat"></div>
+        </div>
+
       </div>
-
-      <div class="card">
-        <h2>Pegawai</h2>
-        <button class="btn btn-outline" id="btnSeedPegawai">Isi pegawai default (3 inti + 4 helper)</button>
-        <div style="height:14px;"></div>
-        <div class="field">
-          <label>Nama pegawai</label>
-          <input type="text" id="newEmpName" placeholder="mis. Pegawai Inti 1">
-        </div>
-        <div class="field">
-          <label>Peran</label>
-          <select id="newEmpRole">
-            <option value="inti">Pegawai inti (Rp 15.000)</option>
-            <option value="helper">Helper (Rp 10.000)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Gaji pokok</label>
-          <input type="number" id="newEmpSalary" value="15000">
-        </div>
-        <button class="btn btn-primary" id="btnAddPegawai">Tambah pegawai</button>
-        <div id="listPegawai" style="margin-top:14px;"></div>
-      </div>
-
-      <div class="card">
-        <h2>Kelola riwayat</h2>
-        <p style="font-size:.8rem;color:var(--muted);margin-top:-6px;">Ubah atau hapus data penjualan yang sudah tersimpan. Ini satu-satunya tempat riwayat bisa diedit atau dihapus.</p>
-        <div id="listKelolaRiwayat"></div>
-      </div>
-
     </section>
 
   </main>
+</div>
+
+<div id="adminGate">
+  <div class="gate-card">
+    <h2>Masuk sebagai admin</h2>
+    <p>Masukkan PIN untuk mengubah pengaturan.</p>
+    <div class="field">
+      <input type="password" id="pinInput" placeholder="PIN admin" inputmode="numeric">
+    </div>
+    <button class="btn btn-primary" id="btnPinSubmit">Masuk</button>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -381,6 +415,7 @@
    ========================================================= */
 const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
 const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
+const ADMIN_PIN = "1234"; // ganti PIN admin di sini
 const BONUS_PER_ITEM = 500;
 const POTONGAN_ALAT_PERSEN = 0.15; // potongan penggunaan alat 15% dari laba
 
@@ -439,6 +474,7 @@ const state = {
   editingProductId: null,
   editingEmployeeId: null,
   editingSaleId: null,
+  adminUnlocked: false,
   filter: 'month'
 };
 
@@ -446,6 +482,24 @@ const state = {
 function rupiah(n){ return 'Rp ' + Math.round(Number(n)||0).toLocaleString('id-ID'); }
 function escapeHtml(str){
   return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+// Format angka dengan titik ribuan (mis. 15000 -> "15.000") untuk kolom input,
+// supaya pengguna tidak salah hitung nol saat mengetik.
+function formatThousands(value){
+  const digits = String(value).replace(/\D/g,'');
+  if(!digits) return '';
+  return Number(digits).toLocaleString('id-ID');
+}
+// Membalik input yang sudah berformat titik ribuan menjadi angka murni.
+function parseFormattedNumber(str){
+  return Number(String(str).replace(/\D/g,'')) || 0;
+}
+function bindThousandsInput(el, onAfter){
+  el.addEventListener('input', ()=>{
+    const raw = parseFormattedNumber(el.value);
+    el.value = raw ? formatThousands(raw) : '';
+    if(onAfter) onAfter();
+  });
 }
 function todayStr(){
   const d = new Date();
@@ -462,6 +516,20 @@ function itemsSummary(items){
 }
 function employeeNamesSummary(employees){
   return (employees||[]).map(e=>e.name).join(', ') || '-';
+}
+// Menjumlahkan gaji pokok & bonus per pegawai dari sekumpulan transaksi (untuk rekap).
+function aggregateEmployeePayroll(rows){
+  const map = {};
+  rows.forEach(s=>{
+    (s.employees||[]).forEach(e=>{
+      const key = e.employee_id || e.name;
+      if(!map[key]) map[key] = { name: e.name, gaji: 0, bonus: 0, total: 0 };
+      map[key].gaji += Number(e.base_salary||0);
+      map[key].bonus += Number(e.bonus||0);
+      map[key].total += Number(e.total_gaji||0);
+    });
+  });
+  return Object.values(map);
 }
 let toastTimer = null;
 function toast(msg){
@@ -489,6 +557,9 @@ async function init(){
   document.getElementById('inpTanggalHarian').value = todayStr();
   document.getElementById('inpBulanBulanan').value = currentYearMonth();
 
+  bindThousandsInput(inpOmzet);
+  bindThousandsInput(inpLaba, recomputeLaba);
+
   renderProductCart();
   renderEmployeeCheckList();
   recomputeInputPreview();
@@ -499,13 +570,32 @@ async function init(){
   renderKelolaRiwayat();
 }
 
-/* ---------- Tabs (semua menu tanpa login) ---------- */
+/* ---------- Tabs: Input & Riwayat tanpa login, Setting pakai PIN admin ---------- */
 document.querySelectorAll('.tab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>switchTab(btn.dataset.tab));
 });
 function switchTab(name){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
   document.querySelectorAll('.tab-section').forEach(s=>s.classList.toggle('hidden', s.id !== 'section-'+name));
+  if(name === 'setting'){
+    state.adminUnlocked = false;
+    document.getElementById('settingContent').classList.add('hidden');
+    document.getElementById('pinInput').value = '';
+    document.getElementById('adminGate').classList.remove('hidden');
+  }
+}
+document.getElementById('btnPinSubmit').addEventListener('click', checkPin);
+document.getElementById('pinInput').addEventListener('keydown', e=>{ if(e.key==='Enter') checkPin(); });
+function checkPin(){
+  const val = document.getElementById('pinInput').value;
+  if(val === ADMIN_PIN){
+    state.adminUnlocked = true;
+    document.getElementById('adminGate').classList.add('hidden');
+    document.getElementById('settingContent').classList.remove('hidden');
+    renderProdukList(); renderPegawaiList(); renderKelolaRiwayat();
+  } else {
+    toast('PIN salah');
+  }
 }
 
 /* ---------- Daftar produk di Input (langsung tampil semua, isi jumlah saja) ---------- */
@@ -584,7 +674,7 @@ function recomputeInputPreview(){
   const items = getCartItems();
   const totalHarga = items.reduce((sum,it)=>sum+it.subtotal,0);
   document.getElementById('dispTotal').textContent = rupiah(totalHarga);
-  inpOmzet.value = totalHarga || '';
+  inpOmzet.value = totalHarga ? formatThousands(totalHarga) : '';
 
   const employeeIds = getSelectedEmployeeIds();
   const empGajiInfo = document.getElementById('empGajiInfo');
@@ -595,24 +685,27 @@ function recomputeInputPreview(){
     empGajiInfo.classList.remove('hidden');
     const payroll = buildEmployeePayroll(items, employeeIds);
     let html = payroll.list.map(e=>`
-      <div class="static-row emp-gaji-row">
-        <span class="label">${escapeHtml(e.name)}</span>
-        <span class="value">${rupiah(e.base_salary)} + ${rupiah(e.bonus)} = ${rupiah(e.total_gaji)}</span>
+      <div class="emp-payroll-card">
+        <div class="emp-payroll-name">${escapeHtml(e.name)}</div>
+        <div class="emp-payroll-grid">
+          <div class="cell"><span class="mini-label">Gaji</span><span class="mini-value">${rupiah(e.base_salary)}</span></div>
+          <div class="cell"><span class="mini-label">Bonus</span><span class="mini-value">${rupiah(e.bonus)}</span></div>
+          <div class="cell"><span class="mini-label">Total</span><span class="mini-value">${rupiah(e.total_gaji)}</span></div>
+        </div>
       </div>`).join('');
-    html += `<div class="static-row strong"><span class="label">Total gaji semua pegawai</span><span class="value">${rupiah(payroll.totalGajiSemua)}</span></div>`;
+    html += `<div class="payroll-total-row"><span class="label">Total gaji semua pegawai</span><span class="value">${rupiah(payroll.totalGajiSemua)}</span></div>`;
     empGajiInfo.innerHTML = html;
   }
   recomputeLaba();
 }
 
 function recomputeLaba(){
-  const labaKotor = Number(inpLaba.value) || 0;
+  const labaKotor = parseFormattedNumber(inpLaba.value);
   const potongan = labaKotor * POTONGAN_ALAT_PERSEN;
   const labaBersih = labaKotor - potongan;
   document.getElementById('dispPotongan').textContent = rupiah(potongan);
   document.getElementById('dispLabaBersih').textContent = rupiah(labaBersih);
 }
-inpLaba.addEventListener('input', recomputeLaba);
 
 document.getElementById('btnSimpanPenjualan').addEventListener('click', simpanPenjualan);
 async function simpanPenjualan(){
@@ -624,8 +717,8 @@ async function simpanPenjualan(){
 
   const totalHarga = items.reduce((sum,it)=>sum+it.subtotal,0);
   const payroll = buildEmployeePayroll(items, employeeIds);
-  const omzet = Number(inpOmzet.value) || totalHarga;
-  const labaKotor = Number(inpLaba.value) || 0;
+  const omzet = parseFormattedNumber(inpOmzet.value) || totalHarga;
+  const labaKotor = parseFormattedNumber(inpLaba.value);
   const potongan = labaKotor * POTONGAN_ALAT_PERSEN;
   const labaBersih = labaKotor - potongan;
   const saleDate = document.getElementById('inpTanggal').value || todayStr();
@@ -736,10 +829,23 @@ function exportPDF(rows, title, filename){
 
   const totalOmzet = rows.reduce((sum,s)=>sum+Number(s.omzet||0),0);
   const totalLaba = rows.reduce((sum,s)=>sum+Number(s.laba_bersih||0),0);
-  const finalY = doc.lastAutoTable.finalY || 30;
+  let finalY = doc.lastAutoTable.finalY || 30;
   doc.setFontSize(10);
   doc.text(`Total Omzet: ${rupiah(totalOmzet)}`, 14, finalY + 8);
   doc.text(`Total Laba Bersih: ${rupiah(totalLaba)}`, 14, finalY + 14);
+
+  const payroll = aggregateEmployeePayroll(rows);
+  if(payroll.length){
+    doc.setFontSize(11);
+    doc.text('Rincian gaji & bonus pegawai', 14, finalY + 24);
+    doc.autoTable({
+      head: [['Nama pegawai','Gaji pokok','Bonus','Total gaji']],
+      body: payroll.map(p=>[p.name, rupiah(p.gaji), rupiah(p.bonus), rupiah(p.total)]),
+      startY: finalY + 28,
+      styles:{ fontSize:8 }
+    });
+  }
+
   doc.save(`${filename}.pdf`);
 }
 function exportExcel(rows, filename){
@@ -755,9 +861,13 @@ function exportExcel(rows, filename){
       detail.push({ Tanggal:s.sale_date, Produk:it.name, Harga:it.price, Jumlah:it.qty, Subtotal:it.subtotal });
     });
   });
+  const payroll = aggregateEmployeePayroll(rows).map(p=>({
+    'Nama Pegawai':p.name, 'Gaji Pokok':p.gaji, 'Bonus':p.bonus, 'Total Gaji':p.total
+  }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ringkasan), 'Ringkasan');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), 'Detail Produk');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payroll), 'Gaji Pegawai');
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
 
@@ -939,8 +1049,8 @@ function renderKelolaRiwayat(){
           ${itemFields}
           <label>Pegawai (bisa lebih dari satu)</label>
           ${empChecks}
-          <label>Omzet <input type="number" class="edit-omzet" value="${s.omzet}"></label>
-          <label>Laba (sebelum potongan) <input type="number" class="edit-laba" value="${s.laba_kotor}"></label>
+          <label>Omzet <input type="text" inputmode="numeric" class="edit-omzet" value="${formatThousands(s.omzet)}"></label>
+          <label>Laba (sebelum potongan) <input type="text" inputmode="numeric" class="edit-laba" value="${formatThousands(s.laba_kotor)}"></label>
         </div>
         <div class="row-actions">
           <button class="btn btn-primary btn-sm" data-action="save" data-id="${s.id}">Simpan</button>
@@ -960,6 +1070,12 @@ function renderKelolaRiwayat(){
     </div>`;
   }).join('') || '<p class="empty-note">Belum ada transaksi.</p>';
 }
+document.getElementById('listKelolaRiwayat').addEventListener('input', e=>{
+  if(e.target.classList.contains('edit-omzet') || e.target.classList.contains('edit-laba')){
+    const raw = parseFormattedNumber(e.target.value);
+    e.target.value = raw ? formatThousands(raw) : '';
+  }
+});
 document.getElementById('listKelolaRiwayat').addEventListener('click', async e=>{
   const btn = e.target.closest('button'); if(!btn) return;
   const id = btn.dataset.id, action = btn.dataset.action;
@@ -982,8 +1098,8 @@ document.getElementById('listKelolaRiwayat').addEventListener('click', async e=>
     });
     const saleDate = row.querySelector('.edit-tanggal').value || sale.sale_date;
     const selectedEmpIds = Array.from(row.querySelectorAll('.edit-emp-check:checked')).map(c=>c.value);
-    const omzet = Number(row.querySelector('.edit-omzet').value) || 0;
-    const labaKotor = Number(row.querySelector('.edit-laba').value) || 0;
+    const omzet = parseFormattedNumber(row.querySelector('.edit-omzet').value);
+    const labaKotor = parseFormattedNumber(row.querySelector('.edit-laba').value);
 
     const totalHarga = updatedItems.reduce((sum,it)=>sum+it.subtotal,0);
     const payroll = buildEmployeePayroll(updatedItems, selectedEmpIds);
