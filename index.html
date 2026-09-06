@@ -267,6 +267,10 @@
         <hr class="divider">
 
         <div class="field">
+          <label for="inpModal">Modal</label>
+          <input type="text" inputmode="numeric" id="inpModal" placeholder="0">
+        </div>
+        <div class="field">
           <label for="inpOmzet">Omzet</label>
           <input type="text" inputmode="numeric" id="inpOmzet" placeholder="0">
         </div>
@@ -300,7 +304,7 @@
           <table>
             <thead>
               <tr>
-                <th>Tanggal</th><th>Produk</th><th>Total harga</th>
+                <th>Tanggal</th><th>Produk</th><th>Total harga</th><th>Modal</th>
                 <th>Pegawai</th><th>Gaji+Bonus</th><th>Omzet</th><th>Laba bersih</th>
               </tr>
             </thead>
@@ -336,6 +340,15 @@
 
     <!-- ===================== TAB: SETTING (khusus admin) ===================== -->
     <section id="section-setting" class="tab-section hidden">
+
+        <div class="card">
+          <h2>Pengaturan bonus</h2>
+          <div class="field">
+            <label for="inpBonusPerItem">Nominal bonus per barang terjual</label>
+            <input type="text" inputmode="numeric" id="inpBonusPerItem" placeholder="0">
+          </div>
+          <button class="btn btn-primary" id="btnSimpanBonus">Simpan nominal bonus</button>
+        </div>
 
         <div class="card">
           <h2>Produk</h2>
@@ -395,7 +408,7 @@
    ========================================================= */
 const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
 const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
-const BONUS_PER_ITEM = 500;
+const DEFAULT_BONUS_PER_ITEM = 500; // dipakai bila belum diatur lewat menu Setting
 const POTONGAN_ALAT_PERSEN = 0.15; // potongan penggunaan alat 15% dari laba
 
 let supabaseClient = null;
@@ -405,7 +418,34 @@ if(SUPABASE_URL && !SUPABASE_URL.includes('YOUR-PROJECT') && SUPABASE_ANON_KEY &
   document.addEventListener('DOMContentLoaded', ()=>document.getElementById('demoBanner').classList.remove('hidden'));
 }
 
-const memoryDB = { products: [], employees: [], sales: [] };
+const memoryDB = { products: [], employees: [], sales: [], appSettings: null };
+
+// Nominal bonus per barang tersimpan di tabel app_settings (satu baris,
+// id='main') supaya bisa diubah dari menu Setting dan tetap ada meski
+// aplikasi dibuka ulang / dari perangkat lain.
+async function loadAppSettings(){
+  if(supabaseClient){
+    const { data, error } = await supabaseClient.from('app_settings').select('*').eq('id','main').maybeSingle();
+    if(error){ console.error(error); return { bonus_per_item: DEFAULT_BONUS_PER_ITEM }; }
+    if(!data){
+      const { data: inserted, error: insErr } = await supabaseClient.from('app_settings').insert({ id:'main', bonus_per_item: DEFAULT_BONUS_PER_ITEM }).select().single();
+      if(insErr){ console.error(insErr); return { bonus_per_item: DEFAULT_BONUS_PER_ITEM }; }
+      return inserted;
+    }
+    return data;
+  }
+  if(memoryDB.appSettings === null) memoryDB.appSettings = { bonus_per_item: DEFAULT_BONUS_PER_ITEM };
+  return memoryDB.appSettings;
+}
+async function saveBonusPerItem(value){
+  if(supabaseClient){
+    const { data, error } = await supabaseClient.from('app_settings').update({ bonus_per_item: value, updated_at: new Date().toISOString() }).eq('id','main').select().single();
+    if(error) throw error;
+    return data;
+  }
+  memoryDB.appSettings.bonus_per_item = value;
+  return memoryDB.appSettings;
+}
 
 const db = {
   async list(table){
@@ -453,6 +493,7 @@ const state = {
   editingProductId: null,
   editingEmployeeId: null,
   editingSaleId: null,
+  bonusPerItem: DEFAULT_BONUS_PER_ITEM,
   filter: 'month'
 };
 
@@ -520,6 +561,9 @@ function toast(msg){
 
 /* ---------- Init ---------- */
 async function init(){
+  const appSettings = await loadAppSettings();
+  state.bonusPerItem = Number(appSettings.bonus_per_item) || DEFAULT_BONUS_PER_ITEM;
+
   state.products = await db.list('products');
   state.employees = await db.list('employees');
   state.sales = await db.list('sales');
@@ -534,9 +578,12 @@ async function init(){
   document.getElementById('inpTanggal').value = todayStr();
   document.getElementById('inpTanggalHarian').value = todayStr();
   document.getElementById('inpBulanBulanan').value = currentYearMonth();
+  document.getElementById('inpBonusPerItem').value = formatThousands(state.bonusPerItem);
 
+  bindThousandsInput(inpModal);
   bindThousandsInput(inpOmzet);
   bindThousandsInput(inpLaba, recomputeLaba);
+  bindThousandsInput(document.getElementById('inpBonusPerItem'));
 
   renderProductCart();
   renderEmployeeCheckList();
@@ -589,6 +636,7 @@ document.getElementById('employeeCheckList').addEventListener('change', e=>{
 });
 
 /* ---------- Perhitungan real-time di tab Input ---------- */
+const inpModal = document.getElementById('inpModal');
 const inpOmzet = document.getElementById('inpOmzet');
 const inpLaba = document.getElementById('inpLaba');
 
@@ -615,7 +663,7 @@ function getSelectedEmployeeIds(){
 }
 function buildEmployeePayroll(items, employeeIds){
   const bonusQty = items.filter(it=>it.is_bonus).reduce((s,it)=>s+it.qty,0);
-  const bonus = bonusQty * BONUS_PER_ITEM;
+  const bonus = bonusQty * state.bonusPerItem;
   const list = employeeIds.map(id=>{
     const emp = state.employees.find(e=>e.id===id);
     if(!emp) return null;
@@ -676,6 +724,7 @@ async function simpanPenjualan(){
 
   const totalHarga = items.reduce((sum,it)=>sum+it.subtotal,0);
   const payroll = buildEmployeePayroll(items, employeeIds);
+  const modal = parseFormattedNumber(inpModal.value);
   const omzet = parseFormattedNumber(inpOmzet.value) || totalHarga;
   const labaKotor = parseFormattedNumber(inpLaba.value);
   const potongan = labaKotor * POTONGAN_ALAT_PERSEN;
@@ -686,6 +735,7 @@ async function simpanPenjualan(){
     sale_date: saleDate,
     items,
     total_harga: totalHarga,
+    modal,
     employees: payroll.list,
     total_gaji_semua: payroll.totalGajiSemua,
     omzet,
@@ -700,6 +750,7 @@ async function simpanPenjualan(){
     toast('Penjualan disimpan');
     document.querySelectorAll('.cart-qty').forEach(inp=>inp.value='');
     document.querySelectorAll('.emp-check').forEach(c=>c.checked=false);
+    inpModal.value = '';
     inpLaba.value = '';
     document.getElementById('inpTanggal').value = todayStr();
     recomputeInputPreview();
@@ -742,15 +793,16 @@ function renderRiwayat(){
       <td>${s.sale_date}</td>
       <td class="produk-col">${escapeHtml(itemsSummary(s.items))}</td>
       <td>${rupiah(s.total_harga)}</td>
+      <td>${rupiah(s.modal)}</td>
       <td class="produk-col">${escapeHtml(employeeNamesSummary(s.employees))}</td>
       <td>${rupiah(s.total_gaji_semua)}</td>
       <td>${rupiah(s.omzet)}</td>
       <td class="profit">${rupiah(s.laba_bersih)}</td>
-    </tr>`).join('') || `<tr><td colspan="7" class="empty-note">Belum ada data.</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="8" class="empty-note">Belum ada data.</td></tr>`;
 
   const totalOmzet = rows.reduce((sum,s)=>sum+Number(s.omzet||0),0);
   const totalLaba = rows.reduce((sum,s)=>sum+Number(s.laba_bersih||0),0);
-  foot.innerHTML = rows.length ? `<tr><td colspan="5">Total</td><td>${rupiah(totalOmzet)}</td><td>${rupiah(totalLaba)}</td></tr>` : '';
+  foot.innerHTML = rows.length ? `<tr><td colspan="6">Total</td><td>${rupiah(totalOmzet)}</td><td>${rupiah(totalLaba)}</td></tr>` : '';
 }
 
 /* ---------- Rekap harian (pilih tanggal) & bulanan (pilih bulan) ---------- */
@@ -780,9 +832,9 @@ function exportPDF(rows, title, filename){
   const doc = new jsPDF();
   doc.setFontSize(14); doc.text(`Kuliner — ${title}`, 14, 15);
 
-  const body = rows.map(s=>[s.sale_date, itemsSummary(s.items), rupiah(s.total_harga), employeeNamesSummary(s.employees), rupiah(s.total_gaji_semua), rupiah(s.omzet), rupiah(s.laba_bersih)]);
+  const body = rows.map(s=>[s.sale_date, itemsSummary(s.items), rupiah(s.total_harga), rupiah(s.modal), employeeNamesSummary(s.employees), rupiah(s.total_gaji_semua), rupiah(s.omzet), rupiah(s.laba_bersih)]);
   doc.autoTable({
-    head: [['Tanggal','Produk','Total harga','Pegawai','Gaji+Bonus','Omzet','Laba bersih']],
+    head: [['Tanggal','Produk','Total harga','Modal','Pegawai','Gaji+Bonus','Omzet','Laba bersih']],
     body, startY: 22, styles:{ fontSize:8 }
   });
 
@@ -810,7 +862,7 @@ function exportPDF(rows, title, filename){
 function exportExcel(rows, filename){
   if(!rows.length){ toast('Tidak ada data untuk tanggal/bulan tersebut'); return; }
   const ringkasan = rows.map(s=>({
-    Tanggal:s.sale_date, Produk:itemsSummary(s.items), 'Total Harga':s.total_harga,
+    Tanggal:s.sale_date, Produk:itemsSummary(s.items), 'Total Harga':s.total_harga, Modal:s.modal,
     Pegawai:employeeNamesSummary(s.employees), 'Gaji+Bonus':s.total_gaji_semua, Omzet:s.omzet,
     'Laba Kotor':s.laba_kotor, 'Potongan Alat (15%)':s.potongan_alat, 'Laba Bersih':s.laba_bersih
   }));
@@ -829,6 +881,22 @@ function exportExcel(rows, filename){
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payroll), 'Gaji Pegawai');
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
+
+/* ---------- Setting: Nominal bonus per barang ---------- */
+document.getElementById('btnSimpanBonus').addEventListener('click', async ()=>{
+  const nilai = parseFormattedNumber(document.getElementById('inpBonusPerItem').value);
+  if(nilai <= 0){ toast('Nominal bonus harus lebih dari 0'); return; }
+  try{
+    const updated = await saveBonusPerItem(nilai);
+    state.bonusPerItem = Number(updated.bonus_per_item) || nilai;
+    document.getElementById('inpBonusPerItem').value = formatThousands(state.bonusPerItem);
+    recomputeInputPreview();
+    toast('Nominal bonus diperbarui');
+  }catch(err){
+    console.error(err);
+    toast('Gagal menyimpan: ' + err.message);
+  }
+});
 
 /* ---------- Setting: Produk ---------- */
 document.getElementById('btnAddProduk').addEventListener('click', async ()=>{
@@ -1009,6 +1077,7 @@ function renderKelolaRiwayat(){
           <label>Pegawai (bisa lebih dari satu)</label>
           ${empChecks}
           <label>Omzet <input type="text" inputmode="numeric" class="edit-omzet" value="${formatThousands(s.omzet)}"></label>
+          <label>Modal <input type="text" inputmode="numeric" class="edit-modal" value="${formatThousands(s.modal)}"></label>
           <label>Laba (sebelum potongan) <input type="text" inputmode="numeric" class="edit-laba" value="${formatThousands(s.laba_kotor)}"></label>
         </div>
         <div class="row-actions">
@@ -1030,7 +1099,7 @@ function renderKelolaRiwayat(){
   }).join('') || '<p class="empty-note">Belum ada transaksi.</p>';
 }
 document.getElementById('listKelolaRiwayat').addEventListener('input', e=>{
-  if(e.target.classList.contains('edit-omzet') || e.target.classList.contains('edit-laba')){
+  if(e.target.classList.contains('edit-omzet') || e.target.classList.contains('edit-laba') || e.target.classList.contains('edit-modal')){
     const raw = parseFormattedNumber(e.target.value);
     e.target.value = raw ? formatThousands(raw) : '';
   }
@@ -1058,6 +1127,7 @@ document.getElementById('listKelolaRiwayat').addEventListener('click', async e=>
     const saleDate = row.querySelector('.edit-tanggal').value || sale.sale_date;
     const selectedEmpIds = Array.from(row.querySelectorAll('.edit-emp-check:checked')).map(c=>c.value);
     const omzet = parseFormattedNumber(row.querySelector('.edit-omzet').value);
+    const modal = parseFormattedNumber(row.querySelector('.edit-modal').value);
     const labaKotor = parseFormattedNumber(row.querySelector('.edit-laba').value);
 
     const totalHarga = updatedItems.reduce((sum,it)=>sum+it.subtotal,0);
@@ -1069,6 +1139,7 @@ document.getElementById('listKelolaRiwayat').addEventListener('click', async e=>
       sale_date: saleDate,
       items: updatedItems,
       total_harga: totalHarga,
+      modal,
       employees: payroll.list,
       total_gaji_semua: payroll.totalGajiSemua,
       omzet, laba_kotor: labaKotor, potongan_alat: potongan, laba_bersih: labaBersih
