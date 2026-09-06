@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <meta name="theme-color" content="#1E1B16">
-<title>Kuliner — Catatan Penjualan</title>
+<title>Kuliner — Manajemen Penjualan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -200,13 +200,6 @@
   .row-actions{ display:flex; gap:6px; flex-shrink:0; }
   .chk{ display:flex; align-items:center; gap:6px; font-size:.82rem; font-weight:600; }
   .chk input{ width:auto; }
-  #adminGate{
-    position:fixed; inset:0; background:rgba(30,27,22,.6);
-    display:flex; align-items:center; justify-content:center; z-index:20; padding:20px;
-  }
-  .gate-card{ background:var(--card); border-radius:14px; padding:26px 22px; width:min(320px,100%); text-align:center; }
-  .gate-card h2{ margin:0 0 6px; font-size:1.05rem; }
-  .gate-card p{ margin:0 0 16px; font-size:.8rem; color:var(--muted); }
   #toast{
     position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px);
     background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:8px;
@@ -223,7 +216,7 @@
   </header>
 
   <div id="demoBanner" class="demo-banner hidden">
-    Mode demo lokal — data belum tersambung ke Supabase, jadi tidak tersimpan permanen. Isi SUPABASE_URL &amp; SUPABASE_ANON_KEY di dalam kode untuk menyambungkan database.
+    Catatan Penjualan
   </div>
 
   <nav class="tabs">
@@ -343,24 +336,6 @@
 
     <!-- ===================== TAB: SETTING (khusus admin) ===================== -->
     <section id="section-setting" class="tab-section hidden">
-      <div id="settingContent" class="hidden">
-
-        <div class="card">
-          <h2>Ubah PIN admin</h2>
-          <div class="field">
-            <label for="pinLama">PIN saat ini</label>
-            <input type="password" id="pinLama" inputmode="numeric" placeholder="PIN saat ini">
-          </div>
-          <div class="field">
-            <label for="pinBaru">PIN baru</label>
-            <input type="password" id="pinBaru" inputmode="numeric" placeholder="Minimal 4 digit">
-          </div>
-          <div class="field">
-            <label for="pinBaruKonfirmasi">Konfirmasi PIN baru</label>
-            <input type="password" id="pinBaruKonfirmasi" inputmode="numeric" placeholder="Ulangi PIN baru">
-          </div>
-          <button class="btn btn-primary" id="btnUbahPin">Simpan PIN baru</button>
-        </div>
 
         <div class="card">
           <h2>Produk</h2>
@@ -406,21 +381,9 @@
           <div id="listKelolaRiwayat"></div>
         </div>
 
-      </div>
     </section>
 
   </main>
-</div>
-
-<div id="adminGate">
-  <div class="gate-card">
-    <h2>Masuk sebagai admin</h2>
-    <p>Masukkan PIN untuk mengubah pengaturan.</p>
-    <div class="field">
-      <input type="password" id="pinInput" placeholder="PIN admin" inputmode="numeric">
-    </div>
-    <button class="btn btn-primary" id="btnPinSubmit">Masuk</button>
-  </div>
 </div>
 
 <div id="toast"></div>
@@ -432,7 +395,6 @@
    ========================================================= */
 const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
 const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
-const DEFAULT_ADMIN_PIN = "1234"; // PIN admin awal, bisa diubah lewat menu Setting
 const BONUS_PER_ITEM = 500;
 const POTONGAN_ALAT_PERSEN = 0.15; // potongan penggunaan alat 15% dari laba
 
@@ -443,34 +405,7 @@ if(SUPABASE_URL && !SUPABASE_URL.includes('YOUR-PROJECT') && SUPABASE_ANON_KEY &
   document.addEventListener('DOMContentLoaded', ()=>document.getElementById('demoBanner').classList.remove('hidden'));
 }
 
-const memoryDB = { products: [], employees: [], sales: [], adminPin: null };
-
-// PIN admin disimpan di tabel app_settings (satu baris, id='main') supaya
-// tetap ada meski aplikasi dibuka ulang / dari perangkat lain. Bila Supabase
-// belum disambungkan, PIN hanya tersimpan sementara di memori (mode demo).
-async function loadAdminPin(){
-  if(supabaseClient){
-    const { data, error } = await supabaseClient.from('app_settings').select('*').eq('id','main').maybeSingle();
-    if(error){ console.error(error); return DEFAULT_ADMIN_PIN; }
-    if(!data){
-      const { data: inserted, error: insErr } = await supabaseClient.from('app_settings').insert({ id:'main', admin_pin: DEFAULT_ADMIN_PIN }).select().single();
-      if(insErr){ console.error(insErr); return DEFAULT_ADMIN_PIN; }
-      return inserted.admin_pin;
-    }
-    return data.admin_pin;
-  }
-  if(memoryDB.adminPin === null) memoryDB.adminPin = DEFAULT_ADMIN_PIN;
-  return memoryDB.adminPin;
-}
-async function saveAdminPin(newPin){
-  if(supabaseClient){
-    const { data, error } = await supabaseClient.from('app_settings').update({ admin_pin: newPin, updated_at: new Date().toISOString() }).eq('id','main').select().single();
-    if(error) throw error;
-    return data.admin_pin;
-  }
-  memoryDB.adminPin = newPin;
-  return newPin;
-}
+const memoryDB = { products: [], employees: [], sales: [] };
 
 const db = {
   async list(table){
@@ -518,8 +453,6 @@ const state = {
   editingProductId: null,
   editingEmployeeId: null,
   editingSaleId: null,
-  adminUnlocked: false,
-  adminPin: DEFAULT_ADMIN_PIN,
   filter: 'month'
 };
 
@@ -587,7 +520,6 @@ function toast(msg){
 
 /* ---------- Init ---------- */
 async function init(){
-  state.adminPin = await loadAdminPin();
   state.products = await db.list('products');
   state.employees = await db.list('employees');
   state.sales = await db.list('sales');
@@ -616,32 +548,13 @@ async function init(){
   renderKelolaRiwayat();
 }
 
-/* ---------- Tabs: Input & Riwayat tanpa login, Setting pakai PIN admin ---------- */
+/* ---------- Tabs: semua menu tanpa login ---------- */
 document.querySelectorAll('.tab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>switchTab(btn.dataset.tab));
 });
 function switchTab(name){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
   document.querySelectorAll('.tab-section').forEach(s=>s.classList.toggle('hidden', s.id !== 'section-'+name));
-  if(name === 'setting'){
-    state.adminUnlocked = false;
-    document.getElementById('settingContent').classList.add('hidden');
-    document.getElementById('pinInput').value = '';
-    document.getElementById('adminGate').classList.remove('hidden');
-  }
-}
-document.getElementById('btnPinSubmit').addEventListener('click', checkPin);
-document.getElementById('pinInput').addEventListener('keydown', e=>{ if(e.key==='Enter') checkPin(); });
-function checkPin(){
-  const val = document.getElementById('pinInput').value;
-  if(val === state.adminPin){
-    state.adminUnlocked = true;
-    document.getElementById('adminGate').classList.add('hidden');
-    document.getElementById('settingContent').classList.remove('hidden');
-    renderProdukList(); renderPegawaiList(); renderKelolaRiwayat();
-  } else {
-    toast('PIN salah');
-  }
 }
 
 /* ---------- Daftar produk di Input (langsung tampil semua, isi jumlah saja) ---------- */
@@ -916,29 +829,6 @@ function exportExcel(rows, filename){
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payroll), 'Gaji Pegawai');
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
-
-/* ---------- Setting: Ubah PIN admin ---------- */
-document.getElementById('btnUbahPin').addEventListener('click', async ()=>{
-  const lama = document.getElementById('pinLama').value;
-  const baru = document.getElementById('pinBaru').value;
-  const konfirmasi = document.getElementById('pinBaruKonfirmasi').value;
-
-  if(lama !== state.adminPin){ toast('PIN saat ini salah'); return; }
-  if(!baru || baru.length < 4){ toast('PIN baru minimal 4 digit'); return; }
-  if(baru !== konfirmasi){ toast('Konfirmasi PIN baru tidak sama'); return; }
-
-  try{
-    const updated = await saveAdminPin(baru);
-    state.adminPin = updated;
-    document.getElementById('pinLama').value = '';
-    document.getElementById('pinBaru').value = '';
-    document.getElementById('pinBaruKonfirmasi').value = '';
-    toast('PIN admin berhasil diperbarui');
-  }catch(err){
-    console.error(err);
-    toast('Gagal memperbarui PIN: ' + err.message);
-  }
-});
 
 /* ---------- Setting: Produk ---------- */
 document.getElementById('btnAddProduk').addEventListener('click', async ()=>{
