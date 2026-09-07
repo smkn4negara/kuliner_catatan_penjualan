@@ -216,7 +216,7 @@
   </header>
 
   <div id="demoBanner" class="demo-banner hidden">
-    Catatan Penjualan
+    Mode demo lokal — data belum tersambung ke Supabase, jadi tidak tersimpan permanen. Isi SUPABASE_URL &amp; SUPABASE_ANON_KEY di dalam kode untuk menyambungkan database.
   </div>
 
   <nav class="tabs">
@@ -406,8 +406,8 @@
    KONFIGURASI — isi dengan kredensial proyek Supabase Anda.
    Jalankan supabase-schema.sql di SQL editor Supabase dulu.
    ========================================================= */
-const SUPABASE_URL = 'https://etkdxfsoxcsanrdfcweh.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_gdI0EWeCkxJSBT_NYENXEA_ieONfsa2';
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
 const DEFAULT_BONUS_PER_ITEM = 500; // dipakai bila belum diatur lewat menu Setting
 const POTONGAN_ALAT_PERSEN = 0.15; // potongan penggunaan alat 15% dari laba
 
@@ -663,18 +663,19 @@ function getSelectedEmployeeIds(){
 }
 function buildEmployeePayroll(items, employeeIds){
   const bonusQty = items.filter(it=>it.is_bonus).reduce((s,it)=>s+it.qty,0);
-  const bonus = bonusQty * state.bonusPerItem;
-  const list = employeeIds.map(id=>{
-    const emp = state.employees.find(e=>e.id===id);
-    if(!emp) return null;
+  const totalBonus = bonusQty * state.bonusPerItem;
+  const validEmployees = employeeIds.map(id=>state.employees.find(e=>e.id===id)).filter(Boolean);
+  // Total bonus dibagi rata ke semua pegawai yang bertugas pada transaksi ini.
+  const bonusPerEmployee = validEmployees.length ? totalBonus / validEmployees.length : 0;
+  const list = validEmployees.map(emp=>{
     const gajiPokok = Number(emp.base_salary);
     return {
       employee_id: emp.id, name: emp.name, role: emp.role,
-      base_salary: gajiPokok, bonus, total_gaji: gajiPokok + bonus
+      base_salary: gajiPokok, bonus: bonusPerEmployee, total_gaji: gajiPokok + bonusPerEmployee
     };
-  }).filter(Boolean);
+  });
   const totalGajiSemua = list.reduce((s,e)=>s+e.total_gaji,0);
-  return { list, totalGajiSemua, bonus };
+  return { list, totalGajiSemua, bonus: totalBonus };
 }
 
 function recomputeInputPreview(){
